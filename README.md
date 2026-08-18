@@ -115,6 +115,11 @@ embaixo. Clicar revela os cards, ligados a ele por setas verdes; clicar num card
 abre o **bloco de notas**, com abas escrever/ler. Escondido por padrão porque
 quatro camadas desenhando ao mesmo tempo viram árvore de Natal.
 
+O card **se move como um nó**, e as setas acompanham. `x`/`y` em `null` significa
+"nunca foi movido" — aí o card empilha a partir do asterisco; do primeiro arrasto
+em diante, quem manda é o consultor. O mesmo gesto abre o bloco e move o card,
+separados por distância: abaixo de 4px é clique.
+
 Órfã é descartada na hidratação quando a passagem some. O modelo anterior
 sobrevivia no dado e sumia da tela, porque a posição dependia da âncora existir —
 dado invisível é pior que dado ausente.

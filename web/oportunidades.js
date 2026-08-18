@@ -46,6 +46,7 @@
   }
 
   function renderTodos() {
+    if (arrastando) return;   // não recria o card debaixo do ponteiro
     camada().innerHTML = '';
     document.querySelectorAll('.op-seta').forEach((e) => e.remove());
 
@@ -79,12 +80,41 @@
     return el;
   }
 
+  /**
+   * Onde o card fica.
+   *
+   * Posição própria quando já foi arrastado; senão, empilha a partir do
+   * asterisco. O padrão existe para o card nascer em algum lugar razoável — a
+   * partir do primeiro arrasto, quem manda é o consultor.
+   */
+  function posicaoCard(op, origem, i) {
+    if (op.x != null && op.y != null) return { x: op.x, y: op.y };
+    return { x: origem.x + 70, y: origem.y - 30 + i * 104 };
+  }
+
   /** Cards revelados, ligados ao asterisco por setas verdes. */
   function abrirCards(arestaId, lista, origem) {
     lista.forEach((op, i) => {
-      const pos = { x: origem.x + 70, y: origem.y - 30 + i * 104 };
+      const pos = posicaoCard(op, origem, i);
       camada().appendChild(cardOportunidade(op, pos));
-      desenharSeta(origem, pos);
+    });
+    redesenharSetas(arestaId);
+  }
+
+  /**
+   * Redesenha as setas de uma passagem.
+   *
+   * Separado do render dos cards porque durante o arrasto só as setas mudam —
+   * recriar o card no meio do movimento mataria a captura do ponteiro.
+   */
+  function redesenharSetas(arestaId) {
+    document.querySelectorAll(`.op-seta[data-aresta="${arestaId}"]`).forEach((e) => e.remove());
+    if (!abertas.has(arestaId)) return;
+    const conn = connections.find((c) => c.id === arestaId);
+    const origem = posicaoAsterisco(conn);
+    if (!origem) return;
+    daAresta(arestaId).forEach((op, i) => {
+      desenharSeta(arestaId, origem, posicaoCard(op, origem, i));
     });
   }
 
@@ -108,13 +138,68 @@
    * Vai no mesmo `<svg>` das arestas reais, mas fora de `connections[]`: é
    * desenho, não dado. Mesmo padrão da seta de retorno do breakpoint.
    */
-  function desenharSeta(de, para) {
+  function desenharSeta(arestaId, de, para) {
     const linha = document.createElementNS('http://www.w3.org/2000/svg', 'path');
     linha.setAttribute('class', 'op-seta');
+    linha.setAttribute('data-aresta', arestaId);
     const dx = Math.max(24, (para.x - de.x) * 0.5);
     linha.setAttribute('d', `M ${de.x + 8} ${de.y + 6} C ${de.x + dx} ${de.y + 6}, ${para.x - dx} ${para.y + 20}, ${para.x - 4} ${para.y + 20}`);
     document.getElementById('connections-svg').appendChild(linha);
   }
+
+  // ── Arrasto ────────────────────────────────────────────────────────────────
+  /**
+   * O card se move como um nó, e as setas acompanham.
+   *
+   * Precisa distinguir clique de arrasto: o mesmo gesto abre o bloco de notas e
+   * move o card. O critério é distância — abaixo de 4px é clique, acima é
+   * movimento. Sem isso, qualquer tremida ao clicar abriria o notepad no lugar
+   * errado, ou moveria o card sem querer.
+   *
+   * O delta é dividido pelo zoom porque o card vive dentro do container
+   * transformado: 10px de tela viram 20px de canvas a 50%.
+   */
+  let arrastando = null;
+
+  document.addEventListener('pointerdown', (e) => {
+    const el = e.target.closest('.op-card');
+    if (!el) return;
+    const op = oportunidades.find((o) => o.id === el.dataset.op);
+    if (!op) return;
+    e.stopPropagation();
+
+    arrastando = {
+      op, el,
+      mouse: { x: e.clientX, y: e.clientY },
+      base: { x: parseFloat(el.style.left), y: parseFloat(el.style.top) },
+      moveu: false,
+    };
+    el.setPointerCapture(e.pointerId);
+    el.classList.add('op-arrastando');
+  });
+
+  document.addEventListener('pointermove', (e) => {
+    if (!arrastando) return;
+    const dx = (e.clientX - arrastando.mouse.x) / zoom;
+    const dy = (e.clientY - arrastando.mouse.y) / zoom;
+    if (!arrastando.moveu && Math.hypot(dx, dy) * zoom < 4) return;
+    arrastando.moveu = true;
+
+    arrastando.op.x = Math.round(arrastando.base.x + dx);
+    arrastando.op.y = Math.round(arrastando.base.y + dy);
+    arrastando.el.style.left = `${arrastando.op.x}px`;
+    arrastando.el.style.top = `${arrastando.op.y}px`;
+    redesenharSetas(arrastando.op.arestaId);
+  });
+
+  document.addEventListener('pointerup', () => {
+    if (!arrastando) return;
+    const { op, el, moveu } = arrastando;
+    el.classList.remove('op-arrastando');
+    arrastando = null;
+    if (moveu) saveToLocalStorage();
+    else abrirNotepad(op);   // não moveu: era clique
+  });
 
   // ── Interação ──────────────────────────────────────────────────────────────
 
@@ -126,11 +211,6 @@
       abertas.has(id) ? abertas.delete(id) : abertas.add(id);
       renderTodos();
       return;
-    }
-    const card = e.target.closest('.op-card');
-    if (card) {
-      e.stopPropagation();
-      abrirNotepad(oportunidades.find((o) => o.id === card.dataset.op));
     }
   });
 

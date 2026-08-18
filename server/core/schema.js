@@ -80,6 +80,18 @@ const FAMILY_OF = {
 
 const oneOf = (value, allowed, fallback) => (allowed.includes(value) ? value : fallback);
 
+/**
+ * Número ou `null` — nunca zero por acidente.
+ *
+ * `Number(null)` é 0, e 0 é finito. Um guard escrito como
+ * `Number.isFinite(Number(v)) ? Number(v) : null` transforma `null` em 0 na
+ * SEGUNDA hidratação: a primeira grava null, a segunda lê null e devolve zero.
+ * O efeito era um card de oportunidade nascendo colado no canto do canvas em
+ * vez de empilhado no asterisco, e só aparecia depois de dois ciclos de save.
+ */
+const numeroOuNulo = (v) => (v === null || v === undefined || v === ''
+  || !Number.isFinite(Number(v)) ? null : Number(v));
+
 export function nodeDefaults() {
   return {
     type: 'action',
@@ -428,7 +440,7 @@ export function hydrateBreakpoint(raw, index = 0) {
     serie: Array.isArray(raw?.serie)
       ? raw.serie.map((p) => ({
           em: String(p?.em ?? ''),
-          valor: Number.isFinite(Number(p?.valor)) ? Number(p.valor) : null,
+          valor: numeroOuNulo(p?.valor),
           unidade: String(p?.unidade ?? ''),
         }))
       : [],
@@ -454,6 +466,11 @@ export function hydrateOportunidade(raw, index = 0) {
     arestaId: raw?.arestaId ?? null,
     titulo: String(raw?.titulo ?? ''),
     markdown: String(raw?.markdown ?? ''),
+    // Posição própria, arrastável como um nó. `null` = ainda não foi movida, e
+    // aí o cliente empilha a partir do asterisco. Sem isto os cards ficavam
+    // presos numa fila vertical que se sobrepunha ao resto do mapa.
+    x: numeroOuNulo(raw?.x) === null ? null : Math.round(numeroOuNulo(raw.x)),
+    y: numeroOuNulo(raw?.y) === null ? null : Math.round(numeroOuNulo(raw.y)),
     criadoEm: raw?.criadoEm ?? new Date().toISOString(),
   };
 }

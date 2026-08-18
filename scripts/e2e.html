@@ -646,6 +646,19 @@ async function until(fn, ms = 6000, step = 100) {
     check('oportunidade criada pela interface persiste', cvI.oportunidades.length === 1);
     check('markdown escrito na interface sobrevive',
       cvI.oportunidades[0].markdown.includes('R$ 12/pedido'));
+    check('oportunidade nasce sem posição própria (empilha a partir do asterisco)',
+      cvI.oportunidades[0].x === null && cvI.oportunidades[0].y === null,
+      `x=${JSON.stringify(cvI.oportunidades[0].x)} y=${JSON.stringify(cvI.oportunidades[0].y)} id=${cvI.oportunidades[0].id}`);
+
+    // Arrastar o card grava x/y — sem isso ele voltaria para a fila a cada F5.
+    await api('PUT', `/api/clients/${clientId}/canvases/${canvas.id}`, {
+      nodes: cvI.nodes, connections: cvI.connections,
+      oportunidades: [{ ...cvI.oportunidades[0], x: 640, y: 310 }],
+    });
+    const cvP = (await api('GET', `/api/clients/${clientId}/canvases/${canvas.id}`)).canvas;
+    check('posição do card arrastado persiste',
+      cvP.oportunidades[0].x === 640 && cvP.oportunidades[0].y === 310,
+      `${cvP.oportunidades[0].x},${cvP.oportunidades[0].y}`);
 
     // ══ Gargalo na PASSAGEM (aresta) ══════════════════════════════════════
     const cvG = (await api('GET', `/api/clients/${clientId}/canvases/${canvas.id}`)).canvas;

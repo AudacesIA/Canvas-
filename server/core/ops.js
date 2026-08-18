@@ -22,7 +22,7 @@ export const OP_KINDS = [
   'addOportunidade', 'updateOportunidade', 'removeOportunidade',
 ];
 
-const WRITABLE_OP_FIELDS = new Set(['titulo', 'markdown', 'arestaId']);
+const WRITABLE_OP_FIELDS = new Set(['titulo', 'markdown', 'arestaId', 'x', 'y']);
 
 /** Campos de um breakpoint que uma op pode escrever. */
 const WRITABLE_BP_FIELDS = new Set(['oQueMede', 'cadencia', 'consumidor', 'evidencia', 'serie', 'alvo']);
