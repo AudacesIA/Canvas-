@@ -94,6 +94,21 @@
         }
       }
     });
+
+    el.querySelector('#chat-messages-container').addEventListener('click', (e) => {
+      const btnAbrir = e.target.closest('[data-chat-abrir-cenario]');
+      if (btnAbrir) {
+        const id = btnAbrir.dataset.chatAbrirCenario;
+        if (window.openCanvas) window.openCanvas(id);
+        return;
+      }
+      const btnComp = e.target.closest('[data-chat-comparar-cenario]');
+      if (btnComp) {
+        const id = btnComp.dataset.chatCompararCenario;
+        if (window.AudasysComparador) window.AudasysComparador.abrirModalComparador(window.activeClientId, id);
+        return;
+      }
+    });
   }
 
   function toggleChat() {
@@ -139,8 +154,9 @@
       }
 
       try {
-        const baseId = isCenario ? window.currentCanvasDerivadoDe.canvasId : activeCanvasId;
-        const res = await Audasys.api.criarCenario(activeClientId, baseId, {
+        const curClientId = window.activeClientId || (window.clientOfCanvas ? window.clientOfCanvas(window.activeCanvasId) : 'cafe-vendas');
+        const baseId = isCenario ? window.currentCanvasDerivadoDe.canvasId : window.activeCanvasId;
+        const res = await Audasys.api.criarCenario(curClientId, baseId, {
           premissa,
           postura,
           nome: `Simulação: ${premissa}`,
@@ -156,8 +172,8 @@
           <strong>Premissa testada:</strong> "${escapeHtml(premissa)}"
           <br><br>
           <div style="display:flex; gap:8px; margin-top:8px;">
-            <button class="arb-btn primary" onclick="window.openCanvas('${novoCenario.id}')"><i class="fa-solid fa-arrow-up-right-from-square"></i> Abrir Cenário</button>
-            <button class="arb-btn" onclick="window.AudasysComparador.abrirModalComparador('${activeClientId}', '${novoCenario.id}')"><i class="fa-solid fa-code-compare"></i> Comparar Impacto</button>
+            <button class="arb-btn primary" data-chat-abrir-cenario="${novoCenario.id}"><i class="fa-solid fa-arrow-up-right-from-square"></i> Abrir Cenário</button>
+            <button class="arb-btn" data-chat-comparar-cenario="${novoCenario.id}"><i class="fa-solid fa-code-compare"></i> Comparar Impacto</button>
           </div>
         `;
         appendMessage('agent', htmlResposta);

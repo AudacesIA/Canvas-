@@ -6,6 +6,8 @@
 (function () {
   'use strict';
 
+  const escapeHtml = window.escapeHtml || ((v) => String(v ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'));
+
   const POSTURA_LABELS = {
     realista: { label: 'Realista', cor: '#3b82f6', bg: 'rgba(59,130,246,0.15)', icon: 'fa-scale-balanced' },
     otimista: { label: 'Otimista', cor: '#10b981', bg: 'rgba(16,185,129,0.15)', icon: 'fa-arrow-trend-up' },
@@ -23,6 +25,14 @@
 
   async function abrirModalComparador(clientId, cenarioId) {
     document.getElementById('comparador-modal')?.remove();
+
+    const effClientId = (clientId && clientId !== 'undefined') ? clientId : (window.activeClientId || (window.clientOfCanvas ? window.clientOfCanvas(cenarioId) : null));
+    const effCenarioId = (cenarioId && cenarioId !== 'undefined') ? cenarioId : window.activeCanvasId;
+
+    if (!effClientId || !effCenarioId) {
+      alert('Não foi possível identificar o cliente ou o cenário para comparar.');
+      return;
+    }
 
     const overlay = document.createElement('div');
     overlay.id = 'comparador-modal';
@@ -62,7 +72,7 @@
     });
 
     try {
-      const { comparacao, texto } = await Audasys.api.compararCenario(clientId, cenarioId);
+      const { comparacao, texto } = await Audasys.api.compararCenario(effClientId, effCenarioId);
       const est = comparacao.estrutura;
       const postura = POSTURA_LABELS[comparacao.postura || 'realista'] || POSTURA_LABELS.realista;
 
@@ -182,8 +192,11 @@
       }
     });
 
+    const effClientId = (clientId && clientId !== 'undefined') ? clientId : (window.activeClientId || (window.clientOfCanvas ? window.clientOfCanvas(baseCanvasId) : null));
+    const effBaseId = (baseCanvasId && baseCanvasId !== 'undefined') ? baseCanvasId : window.activeCanvasId;
+
     try {
-      const { cenarios } = await Audasys.api.listarCenarios(clientId, baseCanvasId);
+      const { cenarios } = await Audasys.api.listarCenarios(effClientId, effBaseId);
       const listaEl = ov.querySelector('#cenarios-lista-conteudo');
       if (!cenarios.length) {
         listaEl.innerHTML = `<div class="qd-vazia">Nenhum cenário desenhado para este processo ainda. Crie um cenário para comparar hipóteses de intervenção.</div>`;

@@ -2993,11 +2993,13 @@ async function refreshHome() {
 
 /** Em qual empresa vive um canvas. */
 function clientOfCanvas(canvasId) {
-  for (const folder of homeCache.folders) {
+  for (const folder of homeCache?.folders || []) {
     if ((folder.canvases || []).some(c => c.id === canvasId)) return folder.id;
   }
-  return null;
+  return activeClientId || window.activeClientId || null;
 }
+
+window.clientOfCanvas = clientOfCanvas;
 
 const genId = (prefix) => Audasys.genId(prefix);
 
@@ -3280,7 +3282,13 @@ async function createCanvas(folderId, name) {
 }
 
 async function openCanvas(canvasId) {
-  const clientId = clientOfCanvas(canvasId);
+  let clientId = clientOfCanvas(canvasId) || activeClientId || window.activeClientId;
+  if (!clientId) {
+    try {
+      await refreshHome();
+      clientId = clientOfCanvas(canvasId) || activeClientId || window.activeClientId;
+    } catch (e) {}
+  }
   if (!clientId) { reportError('abrir o canvas', new Error('Empresa do canvas não encontrada')); return; }
 
   try {
@@ -3289,6 +3297,8 @@ async function openCanvas(canvasId) {
 
     activeCanvasId = canvasId;
     activeClientId = clientId;
+    window.activeCanvasId = canvasId;
+    window.activeClientId = clientId;
     childContext = null;
     // A sessão de escrita precisa existir antes de qualquer render: o app
     // dispara saveToLocalStorage() em vários pontos da própria montagem.
@@ -3297,10 +3307,6 @@ async function openCanvas(canvasId) {
     applyCanvasState(canvas, { source: 'open' });
     showCanvasView(canvasId, canvas.name || 'Canvas');
     AudasysAgent.attach(clientId, canvasId);
-
-    // O canvas vazio fica vazio. Antes, o fluxo de demonstração era reinjetado
-    // aqui — apagar tudo e reabrir trazia a demo de volta, brigando com o que
-    // o usuário (ou o agente) tinha acabado de fazer. Agora é botão explícito.
   } catch (err) {
     reportError('abrir o canvas', err);
   }
@@ -3318,6 +3324,8 @@ async function closeCanvas() {
   nextNodeId = 1; nextNoteId = 1;
   activeCanvasId = null;
   activeClientId = null;
+  window.activeCanvasId = null;
+  window.activeClientId = null;
   childContext = null;
   await refreshHome().catch(err => console.warn('home desatualizada', err));
   showHomeView();
