@@ -1,0 +1,691 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>e2e</title>
+<style>body{margin:0;font:13px ui-monospace,monospace;background:#0f1115;color:#e7e9ee}
+pre{padding:16px}iframe{width:1400px;height:900px;border:0;position:fixed;left:-3000px}</style>
+</head>
+<body>
+<pre id="out">rodando…</pre>
+<iframe id="app" src="/"></iframe>
+<script>
+/**
+ * Teste ponta a ponta do walking skeleton.
+ *
+ * Carrega o app real num iframe (mesma origem, então dá para inspecionar o DOM
+ * dele) e percorre o caminho inteiro: agente propõe pelo HTTP → SSE entrega →
+ * fantasma aparece na tela → consultor aceita → vira nó real → persiste.
+ */
+const R = [];
+const check = (name, pass, detail = '') => R.push(`${pass ? 'PASS ' : 'FALHA'}  ${name}${detail ? '  — ' + detail : ''}`);
+const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+const api = async (m, p, b) => {
+  const res = await fetch(p, { method: m, headers: b ? { 'Content-Type': 'application/json' } : {}, body: b ? JSON.stringify(b) : undefined });
+  const j = await res.json().catch(() => null);
+  if (!res.ok) throw new Error(j?.error || res.status);
+  return j;
+};
+
+/** Espera uma condição virar verdadeira, com limite. */
+async function until(fn, ms = 6000, step = 100) {
+  const t0 = Date.now();
+  while (Date.now() - t0 < ms) { if (fn()) return true; await sleep(step); }
+  return false;
+}
+
+(async () => {
+  let clientId = null;
+  try {
+    // --- 1. cenário: uma empresa com um canvas de 2 nós ---
+    const { client } = await api('POST', '/api/clients', { name: 'E2E ' + Date.now() });
+    clientId = client.id;
+    const { canvas } = await api('POST', `/api/clients/${clientId}/canvases`, { name: 'Faturamento' });
+    await api('PUT', `/api/clients/${clientId}/canvases/${canvas.id}`, {
+      nodes: [
+        { id: 'n1', type: 'trigger', name: 'Pedido aprovado', x: 100, y: 200, owner: 'Comercial' },
+        { id: 'n2', type: 'action', name: 'Emitir NF', x: 420, y: 200, owner: 'Financeiro' },
+      ],
+      connections: [{ id: 'c1', from: 'n1', to: 'n2' }],
+    });
+
+    // --- 2. o app carrega e abre o canvas ---
+    const frame = document.getElementById('app');
+    await new Promise(r => frame.addEventListener('load', r, { once: true }));
+    const W = frame.contentWindow, D = frame.contentDocument;
+
+    const homeReady = await until(() => typeof W.openCanvas === 'function' && D.querySelector('.canvas-card-name'));
+    check('app carregou e listou canvases', homeReady);
+
+    await W.openCanvas(canvas.id);
+    const opened = await until(() => D.querySelectorAll('.canvas-node').length === 2);
+    check('canvas abriu com os 2 nós renderizados', opened, D.querySelectorAll('.canvas-node').length + ' nós');
+
+    // Esperar o SSE de fato abrir. Propor antes disso grava a proposta sem
+    // ninguém para vê-la — era uma corrida que o teste vencia por sorte.
+    check('SSE conectado', await until(() => W.AudasysAgent.connected, 5000));
+
+    // --- 3. o agente propõe (é o que propose_changeset faz por baixo) ---
+    const proposal = await api('POST', `/api/clients/${clientId}/canvases/${canvas.id}/changesets`, {
+      title: 'Aprovação do gerente',
+      rationale: 'Marcos descreveu essa etapa na transcrição de 03/08.',
+      ops: [
+        { opId: 'op_1', kind: 'addNode', reason: 'citado na transcrição, p.4',
+          node: { id: 'node_prop_1', type: 'action', name: 'Aprovar NF', owner: 'Gerente', x: 740, y: 200 } },
+        { opId: 'op_2', kind: 'addEdge', edge: { from: 'n2', to: 'node_prop_1', label: 'emitida' } },
+        { opId: 'op_3', kind: 'updateNode', nodeId: 'n2', set: { duration: '30 min' } },
+      ],
+    });
+    check('servidor viu a aba assistindo (SSE conectado)', proposal.watching > 0, 'watching=' + proposal.watching);
+
+    // --- 4. o fantasma chega na tela sem F5 ---
+    const ghostAppeared = await until(() => D.querySelector('.canvas-node.pending-add'), 5000);
+    check('card verde tracejado apareceu sozinho', !!ghostAppeared);
+    check('nó proposto tem o nome certo',
+      D.querySelector('.canvas-node.pending-add .node-title')?.textContent.trim() === 'Aprovar NF',
+      D.querySelector('.canvas-node.pending-add .node-title')?.textContent.trim());
+    check('nó alterado marcado em âmbar', !!D.querySelector('.canvas-node.pending-update'));
+    check('badge de campos sugeridos', D.querySelector('.pending-badge')?.textContent === '1');
+    check('barra de revisão apareceu', !!D.getElementById('agent-review-bar'));
+    check('barra mostra o título da proposta',
+      D.querySelector('.arb-title')?.textContent.includes('Aprovação do gerente'));
+
+    // --- 5. o disco ainda NÃO mudou ---
+    const midway = await api('GET', `/api/clients/${clientId}/canvases/${canvas.id}`);
+    check('disco intacto antes do aceite', midway.canvas.nodes.length === 2, midway.canvas.nodes.length + ' nós');
+
+    // --- 6. o consultor aceita ---
+    D.querySelector('[data-act="accept"]').click();
+    const applied = await until(() => !D.querySelector('.canvas-node.pending-add') && D.querySelectorAll('.canvas-node').length === 3, 6000);
+    check('após aceitar, fantasma virou nó sólido', applied, D.querySelectorAll('.canvas-node').length + ' nós');
+    check('barra de revisão sumiu', !D.getElementById('agent-review-bar'));
+
+    // --- 7. persistiu com id definitivo ---
+    const after = await api('GET', `/api/clients/${clientId}/canvases/${canvas.id}`);
+    const novo = after.canvas.nodes.find(n => n.name === 'Aprovar NF');
+    check('nó persistiu em disco', !!novo, after.canvas.nodes.length + ' nós, rev=' + after.canvas.rev);
+    check('id definitivo, não node_prop_', !!novo && !novo.id.startsWith('node_prop_'), novo?.id);
+    check('proveniência = agent', novo?.provenance?.createdBy === 'agent');
+    check('aresta ligou ao id reescrito',
+      after.canvas.connections.some(c => c.from === 'n2' && c.to === novo?.id),
+      after.canvas.connections.length + ' arestas');
+    check('updateNode aplicado', after.canvas.nodes.find(n => n.id === 'n2')?.duration === '30 min');
+
+    // --- 8. o app não fica com rev velho (senão o próximo save dá 409) ---
+    const revOk = await until(() => W.Audasys.persistence.rev === after.canvas.rev, 3000);
+    check('cliente sincronizou o rev', revOk, 'cliente=' + W.Audasys.persistence.rev + ' servidor=' + after.canvas.rev);
+
+    // ── G0 · a trava tem que nascer da INTERFACE, não de payload forjado ──
+    // O teste antigo setava fieldMeta na mão, e por isso passava enquanto o
+    // cliente nunca escrevia esse dado. Aqui a edição é de verdade: seleciona
+    // o nó, digita no painel, dispara o input.
+    W.selectNode('n1');
+    const ownerInput = D.getElementById('prop-owner');
+    ownerInput.value = 'Giane';
+    ownerInput.dispatchEvent(new W.Event('input', { bubbles: true }));
+    await W.Audasys.persistence.flush();
+
+    const touched = (await api('GET', `/api/clients/${clientId}/canvases/${canvas.id}`))
+      .canvas.nodes.find(n => n.id === 'n1');
+    check('editar pelo painel grava fieldMeta', !!touched.fieldMeta?.owner,
+      JSON.stringify(touched.fieldMeta?.owner ?? null));
+    check('campo editado fica source:user e travado',
+      touched.fieldMeta?.owner?.source === 'user' && touched.fieldMeta?.owner?.locked === true);
+    check('campo do consultor nasce confirmado',
+      touched.fieldMeta?.owner?.confirmed === true && touched.fieldMeta?.owner?.epistemic === 'documented');
+    check('posição só trava depois do arrasto', !touched.fieldMeta?.x);
+
+    const overUser = await api('POST', `/api/clients/${clientId}/canvases/${canvas.id}/changesets`, {
+      title: 'Tentar sobrescrever o dono', replace: true,
+      ops: [{ opId: 'u1', kind: 'updateNode', nodeId: 'n1', set: { owner: 'Outro' } }],
+    });
+    check('agora o conflito dispara de verdade', overUser.conflicts.length === 1,
+      JSON.stringify(overUser.conflicts));
+    check('conflito aparece em vermelho na tela',
+      await until(() => D.querySelector('.canvas-node.pending-conflict'), 4000));
+    await api('DELETE', `/api/clients/${clientId}/changesets/${overUser.changeset.id}`);
+    await sleep(300);
+
+    // ── G0 · o elemento BPMN segue o tipo visual ──
+    await api('POST', `/api/clients/${clientId}/canvases/${canvas.id}/changesets`, {
+      title: 'Virar decisão', replace: true,
+      ops: [{ opId: 't1', kind: 'updateNode', nodeId: 'n2', set: { type: 'condition' } }],
+    });
+    const csT = (await api('GET', `/api/clients/${clientId}/changesets?canvasId=${canvas.id}`)).changesets[0];
+    await api('POST', `/api/clients/${clientId}/changesets/${csT.id}/resolve`, { accept: ['t1'] });
+    const afterType = (await api('GET', `/api/clients/${clientId}/canvases/${canvas.id}`)).canvas;
+    check('mudar type recalcula o elemento BPMN',
+      afterType.nodes.find(n => n.id === 'n2')?.bpmn?.elementType === 'exclusiveGateway',
+      afterType.nodes.find(n => n.id === 'n2')?.bpmn?.elementType);
+
+    // ── G0 · o outline não corrompe mais o enum no round-trip ──
+    await api('PUT', `/api/clients/${clientId}/canvases/${canvas.id}`, {
+      nodes: afterType.nodes.map(n => n.id === 'n1'
+        ? { ...n, bottleneck: 'fila na conferência', bottleneckCategory: 'estoque' } : n),
+      connections: afterType.connections,
+    });
+    const { outline } = await api('GET', `/api/clients/${clientId}/canvases/${canvas.id}/outline`);
+    check('outline imprime o valor canônico', outline.includes('!gargalo(estoque)'),
+      (outline.match(/!gargalo\([^)]*\)/) || [])[0]);
+    check('outline não inventa "fila"', !outline.includes('gargalo(fila)'));
+
+    // o agente reenvia exatamente o que leu — não pode virar "outro"
+    const lido = (outline.match(/!gargalo\(([^)]*)\)/) || [])[1];
+    await api('POST', `/api/clients/${clientId}/canvases/${canvas.id}/changesets`, {
+      title: 'Reenviar o que leu', replace: true,
+      ops: [{ opId: 'r1', kind: 'updateNode', nodeId: 'n1', set: { bottleneckCategory: lido } }],
+    });
+    const csR = (await api('GET', `/api/clients/${clientId}/changesets?canvasId=${canvas.id}`)).changesets[0];
+    await api('POST', `/api/clients/${clientId}/changesets/${csR.id}/resolve`, { accept: ['r1'] });
+    check('reenviar o valor lido não vira "outro"',
+      (await api('GET', `/api/clients/${clientId}/canvases/${canvas.id}`))
+        .canvas.nodes.find(n => n.id === 'n1')?.bottleneckCategory === 'estoque');
+
+    // ── G0 · nome vazio é erro, não aviso ──
+    let blocked = false, msg = '';
+    try {
+      await api('POST', `/api/clients/${clientId}/canvases/${canvas.id}/changesets`, {
+        title: 'Nó anônimo', replace: true,
+        ops: [{ opId: 'v1', kind: 'addNode', node: { type: 'action', x: 0, y: 0 } }],
+      });
+    } catch (e) { blocked = true; msg = e.message; }
+    check('nó sem nome é recusado', blocked, (msg.split('\n')[1] || msg).slice(0, 60));
+
+    // --- 9. campo escrito pelo agente não deve travar ---
+    await api('POST', `/api/clients/${clientId}/canvases/${canvas.id}/changesets`, {
+      title: 'Tentar sobrescrever', replace: true,
+      ops: [{ opId: 'c1', kind: 'updateNode', nodeId: novo.id, set: { owner: 'Outro' } }],
+    });
+    await sleep(600);
+    check('campo escrito pelo agente NÃO vira conflito', !D.querySelector('.canvas-node.pending-conflict'));
+
+    // marca como editado à mão e repropõe
+    await api('PUT', `/api/clients/${clientId}/canvases/${canvas.id}`, {
+      nodes: after.canvas.nodes.map(n => n.id === novo.id
+        ? { ...n, owner: 'Diretoria', fieldMeta: { ...n.fieldMeta, owner: { source: 'user', at: new Date().toISOString(), locked: true } } }
+        : n),
+      connections: after.canvas.connections,
+    });
+    const conflictProposal = await api('POST', `/api/clients/${clientId}/canvases/${canvas.id}/changesets`, {
+      title: 'Sobrescrever campo travado', replace: true,
+      ops: [{ opId: 'k1', kind: 'updateNode', nodeId: novo.id, set: { owner: 'Outro' } }],
+    });
+    check('campo tocado à mão vira conflito', conflictProposal.conflicts.length === 1,
+      JSON.stringify(conflictProposal.conflicts));
+    await api('DELETE', `/api/clients/${clientId}/changesets/${conflictProposal.changeset.id}`);
+
+    // ══ G1 · ergonomia do changeset ═══════════════════════════════════════
+    for (const cs of (await api('GET', `/api/clients/${clientId}/changesets`)).changesets) {
+      await api('DELETE', `/api/clients/${clientId}/changesets/${cs.id}`).catch(() => {});
+    }
+    await sleep(300);
+
+    const base = (await api('GET', `/api/clients/${clientId}/canvases/${canvas.id}`)).canvas;
+    const alvo = base.nodes.find(n => n.name === 'Aprovar NF').id;
+
+    // aceite em bloco: 3 grupos, aceita só o do meio
+    const grouped = await api('POST', `/api/clients/${clientId}/canvases/${canvas.id}/changesets`, {
+      title: 'Mapa completo', replace: true,
+      groups: [
+        { id: 'gA', title: 'Fluxo do pedido',  opIds: ['a1', 'a2'] },
+        { id: 'gB', title: 'Fluxo de insumos', opIds: ['b1', 'b2'] },
+        { id: 'gC', title: 'Pós-venda',        opIds: ['c1'] },
+      ],
+      ops: [
+        { opId: 'a1', kind: 'addNode', node: { id: 'node_prop_a1', type: 'action', name: 'Grupo A um', x: 0, y: 900 } },
+        { opId: 'a2', kind: 'addNode', node: { id: 'node_prop_a2', type: 'action', name: 'Grupo A dois', x: 320, y: 900 } },
+        { opId: 'b1', kind: 'addNode', node: { id: 'node_prop_b1', type: 'action', name: 'Grupo B um', x: 0, y: 1200 } },
+        { opId: 'b2', kind: 'addEdge', edge: { from: 'node_prop_b1', to: alvo } },
+        { opId: 'c1', kind: 'addNode', node: { id: 'node_prop_c1', type: 'action', name: 'Grupo C um', x: 0, y: 1500 } },
+      ],
+    });
+    check('changeset aceita grupos', grouped.changeset.groups.length === 3,
+      grouped.changeset.groups.map(g => g.title).join(' | '));
+    check('cada op sabe seu grupo', grouped.changeset.ops.every(o => o.groupId));
+    check('changeset declara os nós que toca', grouped.changeset.touchedNodes.length > 0,
+      grouped.changeset.touchedNodes.length + ' nós');
+
+    check('drawer renderiza cabeçalhos de grupo', await until(() => {
+      D.querySelector('[data-act="review"]')?.click();
+      return D.querySelectorAll('.agd-group').length === 3;
+    }, 4000), D.querySelectorAll('.agd-group').length + ' blocos');
+
+    D.querySelector('[data-accept-group="gB"]')?.click();
+    await sleep(900);
+    const afterGroup = (await api('GET', `/api/clients/${clientId}/canvases/${canvas.id}`)).canvas;
+    const nomes = afterGroup.nodes.map(n => n.name);
+    check('aceitar um bloco aplica só as ops dele',
+      nomes.includes('Grupo B um') && !nomes.includes('Grupo A um') && !nomes.includes('Grupo C um'),
+      nomes.filter(n => n.startsWith('Grupo')).join(', ') || 'nenhum');
+
+    // ops órfãs não somem: caem num bloco "Outros"
+    const orphan = await api('POST', `/api/clients/${clientId}/canvases/${canvas.id}/changesets`, {
+      title: 'Com órfã', replace: true,
+      groups: [{ id: 'g1', title: 'Bloco', opIds: ['o1'] }],
+      ops: [
+        { opId: 'o1', kind: 'addNode', node: { type: 'action', name: 'Dentro do bloco', x: 0, y: 1800 } },
+        { opId: 'o2', kind: 'addNode', node: { type: 'action', name: 'Fora do bloco', x: 320, y: 1800 } },
+      ],
+    });
+    check('op sem grupo cai em "Outros"',
+      orphan.changeset.groups.some(g => g.title === 'Outros' && g.opIds.includes('o2')));
+    await api('DELETE', `/api/clients/${clientId}/changesets/${orphan.changeset.id}`);
+    await sleep(200);
+
+    // propostas concorrentes em regiões disjuntas coexistem
+    const p1 = await api('POST', `/api/clients/${clientId}/canvases/${canvas.id}/changesets`, {
+      title: 'Região 1',
+      ops: [{ opId: 'x1', kind: 'updateNode', nodeId: 'n2', set: { description: 'lado A' } }],
+    });
+    let p2 = null, colidiu = false;
+    try {
+      p2 = await api('POST', `/api/clients/${clientId}/canvases/${canvas.id}/changesets`, {
+        title: 'Região 2',
+        ops: [{ opId: 'y1', kind: 'updateNode', nodeId: alvo, set: { description: 'lado B' } }],
+      });
+    } catch { colidiu = true; }
+    check('duas propostas em regiões disjuntas coexistem', !colidiu && !!p2);
+
+    let mesmaRegiao = false;
+    try {
+      await api('POST', `/api/clients/${clientId}/canvases/${canvas.id}/changesets`, {
+        title: 'Região 1 de novo',
+        ops: [{ opId: 'z1', kind: 'updateNode', nodeId: 'n2', set: { description: 'colide' } }],
+      });
+    } catch { mesmaRegiao = true; }
+    check('proposta sobre o mesmo nó ainda é barrada', mesmaRegiao);
+
+    // pendência fica visível na listagem
+    const listed = (await api('GET', `/api/clients/${clientId}/canvases`)).canvases
+      .find(c => c.id === canvas.id);
+    check('listagem conta as propostas pendentes', listed.pendingChangesets === 2,
+      listed.pendingChangesets + ' pendente(s)');
+
+    for (const cs of (await api('GET', `/api/clients/${clientId}/changesets`)).changesets) {
+      await api('DELETE', `/api/clients/${clientId}/changesets/${cs.id}`);
+    }
+
+    // ══ G2 · vocabulário por cliente ═══════════════════════════════════════
+    const vocab = await api('GET', `/api/clients/${clientId}/vocabulary`);
+    const areaIds = vocab.areas.map(a => a.id);
+    check('padrão inclui as áreas que faltavam',
+      ['suporte', 'atendimento', 'logistica', 'compras'].every(a => areaIds.includes(a)),
+      areaIds.length + ' áreas');
+    check('taxonomia ganhou defeito e política',
+      ['defeito', 'politica'].every(w => vocab.wasteCategories.some(x => x.id === w)));
+
+    const okArea = await api('POST', `/api/clients/${clientId}/canvases/${canvas.id}/changesets`, {
+      title: 'Nó de suporte', replace: true,
+      ops: [{ opId: 's1', kind: 'addNode',
+        node: { type: 'action', name: 'Triagem no WhatsApp', area: 'suporte', x: 0, y: 2100,
+                bottleneck: 'reenvia antes de checar', bottleneckCategories: ['retrabalho', 'politica'] } }],
+    });
+    check('área "suporte" é aceita', !!okArea.changeset);
+    const csS = okArea.changeset.id;
+    await api('POST', `/api/clients/${clientId}/changesets/${csS}/resolve`, { accept: ['s1'] });
+    const comSuporte = (await api('GET', `/api/clients/${clientId}/canvases/${canvas.id}`)).canvas
+      .nodes.find(n => n.name === 'Triagem no WhatsApp');
+    check('gargalo aceita causa múltipla',
+      JSON.stringify(comSuporte.bottleneckCategories) === '["retrabalho","politica"]',
+      JSON.stringify(comSuporte.bottleneckCategories));
+    check('singular fica sincronizado com o primeiro', comSuporte.bottleneckCategory === 'retrabalho');
+
+    let vocabErr = '';
+    try {
+      await api('POST', `/api/clients/${clientId}/canvases/${canvas.id}/changesets`, {
+        title: 'Área inexistente', replace: true,
+        ops: [{ opId: 'w1', kind: 'addNode', node: { type: 'action', name: 'X', area: 'juridico', x: 0, y: 2400 } }],
+      });
+    } catch (e) { vocabErr = e.message; }
+    check('área inexistente é recusada com a lista válida',
+      vocabErr.includes('juridico') && vocabErr.includes('suporte'),
+      vocabErr.split('\n')[1]?.slice(0, 70));
+
+    check('selects da interface vieram do servidor',
+      [...D.getElementById('prop-dept').options].some(o => o.value === 'suporte'),
+      D.getElementById('prop-dept').options.length + ' opções');
+
+    // ══ G3 · modo de validação ═════════════════════════════════════════════
+    await api('POST', `/api/clients/${clientId}/canvases/${canvas.id}/changesets`, {
+      title: 'Com procedência declarada', replace: true,
+      ops: [{
+        opId: 'e1', kind: 'addNode',
+        epistemic: { owner: 'reported', bottleneck: 'inferred' },
+        node: { type: 'action', name: 'Conferir pedido final', owner: 'Giane', x: 0, y: 2700,
+                bottleneck: 'confere no olho, sem checklist formal' },
+      }],
+    });
+    const csE = (await api('GET', `/api/clients/${clientId}/changesets?canvasId=${canvas.id}`)).changesets[0];
+    await api('POST', `/api/clients/${clientId}/changesets/${csE.id}/resolve`, { accept: ['e1'] });
+
+    const comProc = (await api('GET', `/api/clients/${clientId}/canvases/${canvas.id}`)).canvas
+      .nodes.find(n => n.name === 'Conferir pedido final');
+    check('agente declara procedência por campo',
+      comProc.fieldMeta.owner.epistemic === 'reported' && comProc.fieldMeta.bottleneck.epistemic === 'inferred',
+      `owner=${comProc.fieldMeta.owner.epistemic} bottleneck=${comProc.fieldMeta.bottleneck.epistemic}`);
+
+    // Confirmar deixou de ser tela à parte com rota própria: virou gesto no
+    // campo, e `fieldMeta.confirmed` viaja dentro do nó no save normal. As
+    // garantias testadas continuam as mesmas — só o caminho mudou. A suíte
+    // chamava GET /validation aqui e ABORTAVA, levando junto as ~25 checagens
+    // seguintes (métricas, layout, validate e subprocesso nunca rodaram).
+    const pendentesDe = (no) => Object.entries(no.fieldMeta || {})
+      .filter(([f, m]) => m.source === 'agent' && !m.confirmed
+        && ['inferred', 'assumed'].includes(m.epistemic) && !['x', 'y'].includes(f))
+      .map(([f]) => f);
+
+    const doNo = pendentesDe(comProc);
+    check('só o inferido fica pendente de conferência',
+      doNo.includes('bottleneck') && !doNo.includes('owner'), doNo.join(', '));
+    check('relatado não precisa de confirmação', !doNo.includes('owner'));
+
+    const outlineTil = (await api('GET', `/api/clients/${clientId}/canvases/${canvas.id}/outline`)).outline;
+    check('outline marca o não confirmado com ~', outlineTil.includes('~'),
+      (outlineTil.match(/~\d+ a confirmar/) || [])[0]);
+    check('outline avisa o agente para não afirmar como fato',
+      outlineTil.includes('não confirmados pelo consultor'));
+
+    const antesDeConferir = (await api('GET', `/api/clients/${clientId}/canvases/${canvas.id}`)).canvas;
+    await api('PUT', `/api/clients/${clientId}/canvases/${canvas.id}`, {
+      nodes: antesDeConferir.nodes.map(n => n.id !== comProc.id ? n : {
+        ...n,
+        fieldMeta: {
+          ...n.fieldMeta,
+          bottleneck: { ...n.fieldMeta.bottleneck, confirmed: true, confirmedAt: new Date().toISOString() },
+        },
+      }),
+      connections: antesDeConferir.connections,
+    });
+    const depois = (await api('GET', `/api/clients/${clientId}/canvases/${canvas.id}`)).canvas
+      .nodes.find(n => n.id === comProc.id);
+    check('confirmar não altera o valor',
+      depois.bottleneck === 'confere no olho, sem checklist formal');
+    check('confirmar preserva a autoria do agente', depois.fieldMeta.bottleneck.source === 'agent');
+    check('confirmar não trava o campo', depois.fieldMeta.bottleneck.locked !== true);
+    check('campo confirmado sai da pendência', !pendentesDe(depois).includes('bottleneck'));
+
+    const linhaAntes = outlineTil.split('\n').find(l => l.includes('Conferir pedido final'));
+    const outlineLimpo = (await api('GET', `/api/clients/${clientId}/canvases/${canvas.id}/outline`)).outline;
+    const linhaDepois = outlineLimpo.split('\n').find(l => l.includes('Conferir pedido final'));
+    const conta = (l) => Number((l?.match(/~(\d+) a confirmar/) || [])[1] ?? 0);
+    check('confirmar reduz o contador do outline', conta(linhaDepois) === conta(linhaAntes) - 1,
+      `${conta(linhaAntes)} → ${conta(linhaDepois)}`);
+
+    // ══ G4 · métricas tipadas ══════════════════════════════════════════════
+    const alvoM = (await api('GET', `/api/clients/${clientId}/canvases/${canvas.id}`)).canvas
+      .nodes.find(n => n.name === 'Conferir pedido final').id;
+    await api('POST', `/api/clients/${clientId}/canvases/${canvas.id}/changesets`, {
+      title: 'Números', replace: true,
+      ops: [{ opId: 'm1', kind: 'updateNode', nodeId: alvoM,
+        set: { metrics: { cycleTimeMin: 12, waitTimeMin: 2880, volumePerMonth: 340, costPerRun: 4.2, reworkRate: 0.18 } } }],
+    });
+    const csM = (await api('GET', `/api/clients/${clientId}/changesets?canvasId=${canvas.id}`)).changesets[0];
+    await api('POST', `/api/clients/${clientId}/changesets/${csM.id}/resolve`, { accept: ['m1'] });
+
+    const { stats } = await api('GET', `/api/clients/${clientId}/canvases/${canvas.id}/outline`);
+    check('lead time soma trabalho e espera', stats.metrics.leadTimeMin === 2892,
+      stats.metrics.leadTimeMin + ' min');
+    check('proporção de tempo parado é calculada',
+      Math.round(stats.metrics.waitShare * 100) === 100 || stats.metrics.waitShare > 0.99,
+      Math.round(stats.metrics.waitShare * 100) + '%');
+    check('custo anual do gargalo em reais',
+      stats.metrics.annualBottleneckCost === Math.round(340 * 12 * 4.2 * 0.18),
+      'R$ ' + stats.metrics.annualBottleneckCost);
+    const outlineM = (await api('GET', `/api/clients/${clientId}/canvases/${canvas.id}/outline`)).outline;
+    check('métricas aparecem no outline', outlineM.includes('×340/mês') && outlineM.includes('↻18%'));
+
+    // ══ G6 · layout automático ═════════════════════════════════════════════
+    const antes = (await api('GET', `/api/clients/${clientId}/canvases/${canvas.id}`)).canvas;
+    const ancorado = antes.nodes.find(n => n.fieldMeta?.x?.locked);
+
+    const semPos = await api('POST', `/api/clients/${clientId}/canvases/${canvas.id}/changesets`, {
+      title: 'Nós sem coordenada', replace: true,
+      ops: [1, 2, 3, 4, 5, 6].map(i => ({
+        opId: `p${i}`, kind: 'addNode',
+        node: { id: `node_prop_p${i}`, type: 'action', name: `Passo auto ${i}` },
+      })),
+    });
+    check('servidor posiciona nó que veio sem x/y',
+      semPos.changeset.ops.every(o => Number.isFinite(o.node.x) && Number.isFinite(o.node.y)));
+    check('não empilha todos em 0,0',
+      new Set(semPos.changeset.ops.map(o => `${o.node.x},${o.node.y}`)).size === 6,
+      semPos.changeset.ops.map(o => `${o.node.x},${o.node.y}`).join(' '));
+    await api('DELETE', `/api/clients/${clientId}/changesets/${semPos.changeset.id}`);
+
+    // Trava a posição de dois nós como se tivessem sido arrastados, e confirma
+    // que o layout não encosta neles.
+    const fixos = antes.nodes.slice(0, 2);
+    await api('PUT', `/api/clients/${clientId}/canvases/${canvas.id}`, {
+      nodes: antes.nodes.map(n => fixos.some(f => f.id === n.id)
+        ? { ...n, fieldMeta: { ...n.fieldMeta,
+              x: { source: 'user', at: new Date().toISOString(), locked: true },
+              y: { source: 'user', at: new Date().toISOString(), locked: true } } }
+        : n),
+      connections: antes.connections,
+    });
+
+    const layout = await api('POST', `/api/clients/${clientId}/canvases/${canvas.id}/layout`, {});
+    check('layout enxerga as âncoras', layout.anchored >= 2, layout.anchored + ' âncora(s)');
+    check('layout não move um pixel do que foi arrastado à mão',
+      !layout.positions.some(p => fixos.some(f => f.id === p.nodeId)),
+      `${layout.positions.length} nó(s) a mover, nenhum ancorado`);
+
+    // No modo scope, tudo fora do escopo é âncora — é como o agente encaixa
+    // nós novos sem tocar no desenho existente.
+    const escopo = antes.nodes.slice(-2).map(n => n.id);
+    const parcial = await api('POST', `/api/clients/${clientId}/canvases/${canvas.id}/layout`, { scope: escopo });
+    check('scope só reposiciona o que foi pedido',
+      parcial.positions.every(p => escopo.includes(p.nodeId)),
+      parcial.positions.length + ' movido(s) de ' + escopo.length + ' no escopo');
+
+    // ══ G7 · validação estrutural ══════════════════════════════════════════
+    const { problems } = await api('GET', `/api/clients/${clientId}/canvases/${canvas.id}/validate`);
+    const texto = problems.join(' | ');
+    check('detecta nós soltos', texto.includes('soltos'), problems.length + ' problema(s)');
+    check('detecta gargalo sem métrica ou avisa sobre fim',
+      texto.includes('gargalo sem métrica') || texto.includes('fim'), texto.slice(0, 80));
+
+    // ══ G5 · subprocesso pelo MCP ══════════════════════════════════════════
+    const paiId = (await api('GET', `/api/clients/${clientId}/canvases/${canvas.id}`)).canvas
+      .nodes.find(n => n.name === 'Aprovar NF').id;
+    await api('POST', `/api/clients/${clientId}/canvases/${canvas.id}/changesets`, {
+      title: 'Detalhar o pós-venda', replace: true,
+      ops: [{
+        opId: 'sp1', kind: 'proposeInChild', nodeId: paiId,
+        ops: [
+          { opId: 'i1', kind: 'addNode', node: { id: 'node_prop_i1', type: 'trigger', name: 'Cliente aciona suporte', x: 0, y: 0 } },
+          { opId: 'i2', kind: 'addNode', node: { id: 'node_prop_i2', type: 'action', name: 'Triagem', x: 320, y: 0 } },
+          { opId: 'i3', kind: 'addEdge', edge: { from: 'node_prop_i1', to: 'node_prop_i2' } },
+        ],
+      }],
+    });
+    const csSP = (await api('GET', `/api/clients/${clientId}/changesets?canvasId=${canvas.id}`)).changesets[0];
+    await api('POST', `/api/clients/${clientId}/changesets/${csSP.id}/resolve`, { accept: ['sp1'] });
+
+    const comFilho = (await api('GET', `/api/clients/${clientId}/canvases/${canvas.id}`)).canvas
+      .nodes.find(n => n.id === paiId);
+    check('ops entraram no subprocesso, não no canvas raiz',
+      comFilho.childCanvas.nodes.length === 2 && comFilho.childCanvas.connections.length === 1,
+      `${comFilho.childCanvas.nodes.length} nós no filho`);
+    check('nó vira modo canvas automaticamente', comFilho.subprocessMode === 'canvas');
+    check('outline sinaliza o subprocesso',
+      (await api('GET', `/api/clients/${clientId}/canvases/${canvas.id}/outline`)).outline.includes('filho↓2'));
+
+    let nested = false;
+    try {
+      await api('POST', `/api/clients/${clientId}/canvases/${canvas.id}/changesets`, {
+        title: 'Filho do filho', replace: true,
+        ops: [{ opId: 'n1', kind: 'proposeInChild', nodeId: paiId,
+          ops: [{ opId: 'n2', kind: 'proposeInChild', nodeId: 'x', ops: [] }] }],
+      });
+    } catch { nested = true; }
+    check('subprocesso dentro de subprocesso é recusado', nested);
+
+    // ══ Camada de Medição · breakpoints ═══════════════════════════════════
+    const cvBp = (await api('GET', `/api/clients/${clientId}/canvases/${canvas.id}`)).canvas;
+    const noAlvo = cvBp.nodes[0].id;
+    const arestaAlvo = cvBp.connections[0]?.id;
+
+    await api('POST', `/api/clients/${clientId}/canvases/${canvas.id}/changesets`, {
+      title: 'Pontos de medição', ops: [
+        { opId: 'b1', kind: 'addBreakpoint', breakpoint: {
+          alvo: { tipo: 'node', id: noAlvo }, oQueMede: 'tempo do passo',
+          cadencia: 'diaria', evidencia: 'observed',
+          consumidor: { quem: 'Coordenador', comoChega: 'painel' } } },
+        { opId: 'b2', kind: 'addBreakpoint', breakpoint: {
+          alvo: { tipo: 'edge', id: arestaAlvo }, oQueMede: 'espera na passagem',
+          cadencia: 'semanal' } },
+      ],
+    });
+    const csBp = (await api('GET', `/api/clients/${clientId}/changesets?canvasId=${canvas.id}`)).changesets[0];
+    await api('POST', `/api/clients/${clientId}/changesets/${csBp.id}/resolve`, { accept: ['b1', 'b2'] });
+
+    const comBp = (await api('GET', `/api/clients/${clientId}/canvases/${canvas.id}`)).canvas;
+    check('breakpoint persiste no canvas', (comBp.breakpoints || []).length === 2,
+      `${(comBp.breakpoints || []).length} breakpoint(s)`);
+    check('breakpoint pode medir uma ARESTA (é onde mora o handoff)',
+      comBp.breakpoints.some(b => b.alvo.tipo === 'edge'));
+
+    const comConsumidor = comBp.breakpoints.find(b => b.alvo.tipo === 'node');
+    const semConsumidor = comBp.breakpoints.find(b => b.alvo.tipo === 'edge');
+    check('malha FECHA quando alguém recebe o dado', comConsumidor.malha === 'fechada');
+    check('malha ABRE quando ninguém recebe', semConsumidor.malha === 'aberta');
+
+    const outBp = (await api('GET', `/api/clients/${clientId}/canvases/${canvas.id}/outline`)).outline;
+    check('outline mostra a camada de medição', outBp.includes('MEDIÇÃO:'));
+    check('outline não deixa o breakpoint cego como ficou o subprocesso',
+      outBp.includes('espera na passagem'));
+    check('diagnóstico acusa malha aberta', outBp.includes('MALHA ABERTA'));
+
+    // Malha é DERIVADA: declarar o consumidor tem de fechá-la sozinho.
+    await api('POST', `/api/clients/${clientId}/canvases/${canvas.id}/changesets`, {
+      title: 'Fechar a malha', ops: [{ opId: 'b3', kind: 'updateBreakpoint',
+        breakpointId: semConsumidor.id, set: { consumidor: { quem: 'Supervisão', comoChega: 'reunião' } } }],
+    });
+    const csFechar = (await api('GET', `/api/clients/${clientId}/changesets?canvasId=${canvas.id}`)).changesets[0];
+    await api('POST', `/api/clients/${clientId}/changesets/${csFechar.id}/resolve`, { accept: ['b3'] });
+    const fechado = (await api('GET', `/api/clients/${clientId}/canvases/${canvas.id}`)).canvas
+      .breakpoints.find(b => b.id === semConsumidor.id);
+    check('declarar consumidor FECHA a malha sozinho', fechado.malha === 'fechada');
+
+    let malhaEscrita = false;
+    try {
+      await api('POST', `/api/clients/${clientId}/canvases/${canvas.id}/changesets`, {
+        title: 'malha na mão', ops: [{ kind: 'updateBreakpoint',
+          breakpointId: fechado.id, set: { malha: 'fechada' } }],
+      });
+    } catch { malhaEscrita = true; }
+    check('"malha" é derivada e não se escreve à mão', malhaEscrita);
+
+    let bpFantasma = false;
+    try {
+      await api('POST', `/api/clients/${clientId}/canvases/${canvas.id}/changesets`, {
+        title: 'alvo fantasma', ops: [{ kind: 'addBreakpoint',
+          breakpoint: { alvo: { tipo: 'node', id: 'nao_existe' }, oQueMede: 'x' } }],
+      });
+    } catch { bpFantasma = true; }
+    check('breakpoint com alvo inexistente é recusado', bpFantasma);
+
+    // ══ Oportunidade de receita ═══════════════════════════════════════════
+    const cvO = (await api('GET', `/api/clients/${clientId}/canvases/${canvas.id}`)).canvas;
+    const arestaO = cvO.connections[0];
+    const MD = '## Reenvio proativo\n\n79 pedidos/mês com endereço errado.\n- ticket **R$ 180**';
+
+    await api('POST', `/api/clients/${clientId}/canvases/${canvas.id}/changesets`, {
+      title: 'Oportunidade na passagem', ops: [
+        { opId: 'o1', kind: 'addOportunidade', oportunidade: {
+          arestaId: arestaO.id, titulo: 'Reenvio proativo', markdown: MD } },
+      ],
+    });
+    const csO = (await api('GET', `/api/clients/${clientId}/changesets?canvasId=${canvas.id}`)).changesets[0];
+    await api('POST', `/api/clients/${clientId}/changesets/${csO.id}/resolve`, { accept: ['o1'] });
+
+    const cvO2 = (await api('GET', `/api/clients/${clientId}/canvases/${canvas.id}`)).canvas;
+    check('oportunidade persiste ancorada na aresta',
+      cvO2.oportunidades.length === 1 && cvO2.oportunidades[0].arestaId === arestaO.id);
+    check('o Markdown sobrevive intacto ao round-trip',
+      cvO2.oportunidades[0].markdown === MD,
+      JSON.stringify(cvO2.oportunidades[0].markdown).slice(0, 60));
+
+    const outO = (await api('GET', `/api/clients/${clientId}/canvases/${canvas.id}/outline`)).outline;
+    check('outline lista a oportunidade por passagem (não nasce cega)',
+      outO.includes('OPORTUNIDADES DE RECEITA:') && outO.includes('Reenvio proativo'));
+    check('outline NÃO despeja o Markdown inteiro (custo de token)',
+      !outO.includes('ticket **R$ 180**'));
+
+    let semAresta = false;
+    try {
+      await api('POST', `/api/clients/${clientId}/canvases/${canvas.id}/changesets`, {
+        title: 'sem passagem', ops: [{ kind: 'addOportunidade',
+          oportunidade: { arestaId: 'nao_existe', titulo: 'x' } }] });
+    } catch { semAresta = true; }
+    check('oportunidade em aresta inexistente é recusada', semAresta);
+
+    // Órfã some: a hipótese sobrevivia no dado e sumia da tela em silêncio.
+    const semTitulo = cvO2.oportunidades[0];
+    await api('PUT', `/api/clients/${clientId}/canvases/${canvas.id}`, {
+      nodes: cvO2.nodes,
+      connections: cvO2.connections.filter(c => c.id !== arestaO.id),
+      oportunidades: cvO2.oportunidades,
+    });
+    const cvO3 = (await api('GET', `/api/clients/${clientId}/canvases/${canvas.id}`)).canvas;
+    check('oportunidade órfã é descartada quando a passagem some',
+      cvO3.oportunidades.length === 0, `${cvO3.oportunidades.length} restante(s)`);
+
+    // Restaura a aresta e cria pelo caminho MANUAL (o da interface): documento
+    // inteiro, sem changeset. É o caminho que o consultor usa na reunião.
+    await api('PUT', `/api/clients/${clientId}/canvases/${canvas.id}`, {
+      nodes: cvO2.nodes, connections: cvO2.connections,
+      oportunidades: [{
+        id: 'op_manual_1', arestaId: arestaO.id,
+        titulo: 'Cobrança de frete expresso',
+        markdown: '- **R$ 12/pedido**\n- 400 pedidos/mês',
+      }],
+    });
+    const cvI = (await api('GET', `/api/clients/${clientId}/canvases/${canvas.id}`)).canvas;
+    check('oportunidade criada pela interface persiste', cvI.oportunidades.length === 1);
+    check('markdown escrito na interface sobrevive',
+      cvI.oportunidades[0].markdown.includes('R$ 12/pedido'));
+
+    // ══ Gargalo na PASSAGEM (aresta) ══════════════════════════════════════
+    const cvG = (await api('GET', `/api/clients/${clientId}/canvases/${canvas.id}`)).canvas;
+    const arestaG = cvG.connections[0];
+    check('conexão nasce com gargalo vazio, sem quebrar canvas antigo',
+      arestaG.gargalo && arestaG.gargalo.texto === '' && Array.isArray(arestaG.gargalo.categorias));
+
+    await api('PUT', `/api/clients/${clientId}/canvases/${canvas.id}`, {
+      nodes: cvG.nodes,
+      connections: cvG.connections.map(c => c.id !== arestaG.id ? c : {
+        ...c, gargalo: { texto: 'endereço chega errado e volta', categorias: ['handoff', 'inventada'] },
+      }),
+    });
+    const comG = (await api('GET', `/api/clients/${clientId}/canvases/${canvas.id}`)).canvas
+      .connections.find(c => c.id === arestaG.id);
+    check('gargalo da passagem persiste', comG.gargalo.texto === 'endereço chega errado e volta');
+    check('categoria fora da taxonomia Lean vira "outro"',
+      comG.gargalo.categorias.includes('handoff') && comG.gargalo.categorias.includes('outro'),
+      comG.gargalo.categorias.join(','));
+
+    const outG = (await api('GET', `/api/clients/${clientId}/canvases/${canvas.id}/outline`)).outline;
+    check('outline mostra o gargalo da passagem (não nasce cego)',
+      outG.includes('endereço chega errado e volta'));
+
+  } catch (err) {
+    check('execução sem exceção', false, err.message + ' | ' + (err.stack || '').split('\n')[1]);
+  }
+
+  if (clientId) { try { await api('DELETE', `/api/clients/${clientId}`); } catch {} }
+
+  const failed = R.filter(r => r.startsWith('FALHA')).length;
+  const text = R.join('\n') + `\n\n${R.length - failed}/${R.length} passaram`;
+  document.getElementById('out').textContent = text;
+  document.title = failed ? `FALHOU(${failed})` : 'TUDO-OK';
+  // O SSE aberto impede o --dump-dom de concluir; reportamos pelo HTTP.
+  await fetch('/api/_test-report', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ verdict: failed ? `FALHOU(${failed})` : 'TUDO-OK', failed, total: R.length, text }),
+  }).catch(() => {});
+})();
+</script>
+</body>
+</html>

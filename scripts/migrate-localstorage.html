@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>Migrar dados do Audaces Canvas</title>
+<style>
+  :root { color-scheme: light dark; --bg:#0f1115; --fg:#e7e9ee; --mut:#9aa3b2; --line:#262b36;
+          --ok:#3fb950; --warn:#d29922; --err:#f85149; --acc:#4c8dff; }
+  * { box-sizing: border-box; }
+  body { margin:0; padding:40px 24px; background:var(--bg); color:var(--fg);
+         font:15px/1.6 -apple-system, "SF Pro Text", system-ui, sans-serif; }
+  main { max-width: 760px; margin: 0 auto; }
+  h1 { font-size: 22px; margin: 0 0 6px; }
+  p.sub { color: var(--mut); margin: 0 0 28px; }
+  section { border:1px solid var(--line); border-radius:10px; padding:18px 20px; margin-bottom:16px; }
+  h2 { font-size:14px; text-transform:uppercase; letter-spacing:.06em; color:var(--mut); margin:0 0 12px; }
+  button { font:inherit; font-weight:600; padding:9px 16px; border-radius:7px; border:1px solid var(--line);
+           background:var(--acc); color:#fff; cursor:pointer; }
+  button.ghost { background:transparent; color:var(--fg); }
+  button:disabled { opacity:.45; cursor:not-allowed; }
+  table { width:100%; border-collapse:collapse; font-size:13px; margin-top:10px; }
+  th, td { text-align:left; padding:6px 8px; border-bottom:1px solid var(--line); }
+  th { color:var(--mut); font-weight:600; }
+  code { background:#1b2029; padding:1px 5px; border-radius:4px; font-size:12.5px; }
+  .row { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+  .ok{color:var(--ok)} .warn{color:var(--warn)} .err{color:var(--err)} .mut{color:var(--mut)}
+  #log { margin-top:14px; white-space:pre-wrap; font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
+         font-size:12.5px; color:var(--mut); }
+  input[type=text] { font:inherit; padding:8px 10px; border-radius:7px; border:1px solid var(--line);
+                     background:#141822; color:var(--fg); min-width:260px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Migrar o Audaces Canvas para o daemon</h1>
+  <p class="sub">Lê os canvases guardados no <code>localStorage</code> desta origem e envia para o servidor de arquivos.</p>
+
+  <section>
+    <h2>1 · Origem</h2>
+    <div id="origin"></div>
+  </section>
+
+  <section>
+    <h2>2 · O que foi encontrado aqui</h2>
+    <div id="found">lendo…</div>
+  </section>
+
+  <section>
+    <h2>3 · Enviar</h2>
+    <div class="row">
+      <label for="cname" class="mut">Nome do cliente:</label>
+      <input type="text" id="cname" value="Padrão">
+      <button id="send" disabled>Enviar para o daemon</button>
+      <button id="download" class="ghost" disabled>Baixar JSON</button>
+    </div>
+    <div id="log"></div>
+  </section>
+
+  <section>
+    <h2>Importar um arquivo baixado</h2>
+    <p class="mut" style="margin:0 0 10px">Use se o envio direto falhar: baixe o JSON na origem antiga e envie por aqui.</p>
+    <input type="file" id="file" accept="application/json">
+  </section>
+</main>
+
+<script>
+const API = 'http://127.0.0.1:8787';
+const $ = (id) => document.getElementById(id);
+const log = (msg, cls='') => { $('log').insertAdjacentHTML('beforeend', `<div class="${cls}">${msg}</div>`); };
+
+// --- 1. varre o localStorage desta origem ---
+function scan() {
+  const canvases = {};
+  let home = null, legacy = null;
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i);
+    let val;
+    try { val = JSON.parse(localStorage.getItem(key)); } catch { continue; }
+    if (key === 'audaces_home') home = val;
+    else if (key === 'audaces_canvas_data') legacy = val;
+    else if (key.startsWith('audaces_canvas_')) canvases[key] = val;
+  }
+  // O nome de cada canvas vive no índice `audaces_home`, não no documento.
+  // Casar aqui evita importar tudo como "Canvas 1786...".
+  if (home?.folders) {
+    for (const folder of home.folders) {
+      for (const cv of (folder.canvases || [])) {
+        const doc = canvases[`audaces_canvas_${cv.id}`];
+        if (doc) { doc.name ??= cv.name; doc.folderId = folder.id; doc.createdAt ??= cv.createdAt; }
+      }
+    }
+  }
+  return { home, legacy, canvases };
+}
+
+const data = scan();
+const keys = Object.keys(data.canvases);
+
+$('origin').innerHTML = `<code>${location.origin}</code> · daemon em <code>${API}</code>` +
+  (location.origin === API ? '' : ' <span class="warn">(origens diferentes — o envio usa CORS)</span>');
+
+// --- 2. relatório ---
+if (!keys.length && !data.legacy) {
+  $('found').innerHTML = `<span class="warn">Nenhum canvas nesta origem.</span>
+    <p class="mut">Os dados ficam na origem onde você usava o app — provavelmente
+    <code>http://localhost:8085</code>. Abra esta mesma página lá.</p>`;
+} else {
+  const rows = keys.map(k => {
+    const d = data.canvases[k] || {};
+    return `<tr><td>${d.name ?? '<span class="mut">sem nome</span>'}</td>
+                <td>${(d.nodes||[]).length}</td><td>${(d.connections||[]).length}</td>
+                <td><code>${k}</code></td></tr>`;
+  }).join('');
+  $('found').innerHTML = `
+    <table><thead><tr><th>Canvas</th><th>Nós</th><th>Arestas</th><th>Chave</th></tr></thead>
+    <tbody>${rows}</tbody></table>
+    ${data.legacy ? `<p class="warn">+ 1 canvas em formato legado (<code>audaces_canvas_data</code>, ${(data.legacy.nodes||[]).length} nós)</p>` : ''}
+    <p class="ok">${keys.length + (data.legacy?1:0)} canvas(es) prontos para migrar.</p>`;
+  $('send').disabled = false;
+  $('download').disabled = false;
+}
+
+function payload() {
+  return { clientName: $('cname').value.trim() || 'Padrão', home: data.home, canvases: data.canvases, legacy: data.legacy };
+}
+
+async function send(body) {
+  $('log').innerHTML = '';
+  log('enviando…');
+  try {
+    const res = await fetch(`${API}/api/import`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+    });
+    const out = await res.json();
+    if (!res.ok) { log(`erro ${res.status}: ${out.error}`, 'err'); return; }
+
+    log(`cliente <code>${out.clientId}</code> · ${out.folders} pasta(s)`, 'ok');
+    for (const c of out.imported) {
+      log(`  importado: ${c.name} — ${c.nodes} nós, ${c.edges} arestas` +
+          (c.droppedEdges ? ` <span class="warn">(${c.droppedEdges} aresta(s) órfã(s) descartada(s))</span>` : ''), 'ok');
+    }
+    for (const s of out.skipped) log(`  pulado: ${s.sourceKey} — ${s.reason}`, 'mut');
+    log(`\nPronto. Abra ${API} para conferir.`, 'ok');
+    log('O localStorage NÃO foi apagado — mantenha por uns 30 dias como rede de segurança.', 'mut');
+  } catch (err) {
+    log(`falhou: ${err.message}`, 'err');
+    log('Se for bloqueio de CORS, use "Baixar JSON" e envie o arquivo pelo campo abaixo, já em ' + API, 'mut');
+  }
+}
+
+$('send').onclick = () => send(payload());
+
+$('download').onclick = () => {
+  const blob = new Blob([JSON.stringify(payload(), null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'audasys-migracao.json';
+  a.click();
+  URL.revokeObjectURL(a.href);
+};
+
+$('file').onchange = (e) => {
+  const f = e.target.files[0];
+  if (!f) return;
+  const r = new FileReader();
+  r.onload = () => { try { send(JSON.parse(r.result)); } catch { log('arquivo não é JSON válido', 'err'); } };
+  r.readAsText(f);
+};
+</script>
+</body>
+</html>

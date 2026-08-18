@@ -1,0 +1,19 @@
+{
+  "name": "audasys-canvas",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Canvas de BPM dirigido por agente. Daemon HTTP local (fonte da verdade) + servidor MCP stdio.",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "node --watch server/index.js"
+  },
+  "dependencies": {
+    "@dagrejs/dagre": "^3.1.1",
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "zod": "^4.4.3"
+  }
+}

@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>selftest</title>
+<script src="/api.js"></script>
+</head>
+<body>
+<pre id="out">rodando…</pre>
+<script>
+/**
+ * Teste de fumaça da camada de persistência, executável com
+ * `chrome --headless --dump-dom /scripts/selftest.html`.
+ *
+ * O que importa provar aqui é o comportamento que não dá para verificar com
+ * curl: que N chamadas rápidas a save() viram UMA escrita HTTP.
+ */
+const results = [];
+const check = (name, pass, detail = '') => results.push(`${pass ? 'PASS' : 'FALHA'}  ${name}${detail ? '  — ' + detail : ''}`);
+
+(async () => {
+  const { api, persistence, genId } = window.Audasys;
+  try {
+    // --- ids não colidem em lote ---
+    const ids = new Set(Array.from({ length: 500 }, () => genId('conn')));
+    check('500 ids em lote são únicos', ids.size === 500, `${ids.size}/500`);
+
+    // --- preparo ---
+    const name = 'Selftest ' + Date.now();
+    const { client } = await api.createClient(name);
+    const { canvas } = await api.createCanvas(client.id, 'Canvas de teste');
+    check('cliente e canvas criados', !!client.id && !!canvas.id, `${client.id} / ${canvas.id}`);
+    check('canvas nasce em schema v2', canvas.schemaVersion === 2, 'v' + canvas.schemaVersion);
+
+    persistence.attach(client.id, canvas.id, canvas.rev);
+
+    // --- debounce: 30 "teclas" em 300ms devem virar 1 PUT ---
+    const states = [];
+    const off = persistence.onState((s) => states.push(s));
+
+    for (let i = 1; i <= 30; i++) {
+      persistence.save({
+        nodes: [{ id: 'n1', type: 'action', name: 'Emitir NF'.slice(0, 0) + 'x'.repeat(i), x: 100, y: 200 }],
+        connections: [], notes: [], zoom: 1, panOffset: { x: 0, y: 0 }, nextNodeId: 2, nextNoteId: 1,
+      });
+      await new Promise(r => setTimeout(r, 10));
+    }
+    await new Promise(r => setTimeout(r, 1400));
+    off();
+
+    const saves = states.filter(s => s === 'saving').length;
+    check('30 saves → 1 escrita HTTP', saves === 1, `${saves} escrita(s)`);
+    check('estado terminou em "saved"', states[states.length - 1] === 'saved', states.slice(-3).join(','));
+
+    // --- persistiu o último valor, não o primeiro ---
+    const after = (await api.getCanvas(client.id, canvas.id)).canvas;
+    check('gravou o último valor', after.nodes[0]?.name === 'x'.repeat(30), after.nodes[0]?.name?.length + ' chars');
+    check('rev avançou 0 → 1', after.rev === 1, 'rev=' + after.rev);
+    check('hidratação preencheu campos', after.nodes[0]?.bottleneck === '' && Array.isArray(after.nodes[0]?.subprocesses));
+    check('BPMN derivado do tipo', after.nodes[0]?.bpmn?.elementType === 'task', after.nodes[0]?.bpmn?.elementType);
+
+    // --- conflito: escrever com rev velho deve emitir "conflict" ---
+    await api.putCanvas(client.id, canvas.id, { nodes: [] }, after.rev); // outra "aba" escreve → rev 2
+    const conflictStates = [];
+    const off2 = persistence.onState((s) => conflictStates.push(s));
+    persistence.save({ nodes: [], connections: [], notes: [] }); // ainda pensa que está no rev 1
+    await persistence.flush();
+    await new Promise(r => setTimeout(r, 200));
+    off2();
+    check('rev velho → conflito, não sobrescrita', conflictStates.includes('conflict'), conflictStates.join(','));
+
+    // --- limpeza ---
+    await api.deleteClient(client.id);
+    check('cliente removido', true);
+  } catch (err) {
+    check('execução sem exceção', false, err.message);
+  }
+
+  const failed = results.filter(r => r.startsWith('FALHA')).length;
+  document.getElementById('out').textContent =
+    results.join('\n') + `\n\n${results.length - failed}/${results.length} passaram`;
+  document.title = failed ? `FALHOU(${failed})` : 'TUDO-OK';
+})();
+</script>
+</body>
+</html>

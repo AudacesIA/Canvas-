@@ -1,0 +1,507 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Audaces Canvas | Mapeamento & Otimização de Processos com IA</title>
+  <meta name="description" content="Canvas de fluxo infinito para mapeamento, estruturação e auditoria de processos internos. Desenvolvido para a operação Audaces.">
+  
+  <!-- Premium Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=Outfit:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+  
+  <!-- FontAwesome Icons for Canvas Nodes -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <!-- Header / Control Bar -->
+  <header class="app-header">
+    <div class="header-logo">
+      <svg class="brand-monogram" width="28" height="28" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <linearGradient id="logo-grad" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" stop-color="#60a5fa" />
+            <stop offset="100%" stop-color="#2563eb" />
+          </linearGradient>
+        </defs>
+        <path d="M42 12 H58 L80 88 H66 L66 48 H57 L57 88 H43 L43 48 H34 L34 88 H20 Z" fill="url(#logo-grad)" />
+      </svg>
+      <span class="logo-text">AUDACES <span class="logo-ai">AI</span></span>
+      <span class="logo-separator">|</span>
+      <span class="logo-subtext">CANVAS</span>
+    </div>
+    
+    <div class="header-filter" id="header-filter">
+      <label for="filter-dept"><i class="fa-solid fa-filter"></i> Área:</label>
+      <select id="filter-dept">
+        <option value="all">Todas as Áreas</option>
+        <option value="geral">Geral</option>
+        <option value="marketing">Marketing</option>
+        <option value="comercial">Comercial</option>
+        <option value="operacoes">Operações</option>
+        <option value="financeiro">Financeiro</option>
+        <option value="rh">RH</option>
+        <option value="administrativo">Administrativo</option>
+      </select>
+    </div>
+    
+    <div class="header-breadcrumb" id="header-breadcrumb" style="display:none;">
+      <button id="btn-back-to-parent"><i class="fa-solid fa-arrow-left"></i> Voltar</button>
+      <span class="breadcrumb-sep">/</span>
+      <span id="breadcrumb-node-name"></span>
+    </div>
+
+    <button id="btn-back-home" class="header-btn back-home-btn" title="Voltar para o início" style="display:none;"><i class="fa-solid fa-arrow-left"></i> Início</button>
+
+    <div class="header-actions" id="header-actions">
+      <button id="btn-save" class="header-btn" title="Estado da gravação — o salvamento é automático"><i class="fa-solid fa-cloud-arrow-up"></i> Salvar</button>
+      <button id="btn-export" class="header-btn" title="Exportar arquivo JSON"><i class="fa-solid fa-file-export"></i> Exportar</button>
+      <button id="btn-add-note" class="header-btn" title="Adicionar anotação rápida (sticky note)"><i class="fa-solid fa-note-sticky"></i> Anotação</button>
+      <button id="btn-oportunidades" class="header-btn" title="Oportunidades de receita mapeadas no canvas"><i class="fa-solid fa-asterisk"></i> Oportunidades</button>
+      <button id="btn-organizar" class="header-btn" title="Reposicionar os blocos em camadas, da esquerda para a direita"><i class="fa-solid fa-wand-magic"></i> Organizar</button>
+      <button id="btn-clear" class="header-btn danger-btn" title="Limpar todo o quadro"><i class="fa-solid fa-trash-can"></i> Limpar</button>
+      <button id="btn-audit" class="audit-btn"><span class="audit-btn-inner"><i class="fa-solid fa-wand-magic-sparkles"></i> Auditoria de IA</span></button>
+    </div>
+  </header>
+
+  <!-- Left Sidebar: Node Palette -->
+  <aside class="node-palette">
+    <div class="palette-title">Elementos</div>
+    <div class="palette-desc">Clique ou arraste para adicionar ao canvas</div>
+    
+    <div class="palette-items">
+      <div class="palette-item" data-node-type="trigger" draggable="true" title="Início ou evento disparador do processo">
+        <div class="item-icon trigger-color"><i class="fa-solid fa-play"></i></div>
+        <div class="item-details">
+          <span class="item-label">Gatilho</span>
+          <span class="item-sub">Início do fluxo</span>
+        </div>
+      </div>
+
+      <div class="palette-item" data-node-type="action" draggable="true" title="Passo ou ação humana/operacional">
+        <div class="item-icon action-color"><i class="fa-solid fa-gears"></i></div>
+        <div class="item-details">
+          <span class="item-label">Ação / Processo</span>
+          <span class="item-sub">Atividade executada</span>
+        </div>
+      </div>
+
+      <div class="palette-item" data-node-type="wait" draggable="true" title="Pausa no fluxo — aguarda tempo ou evento externo">
+        <div class="item-icon wait-color"><i class="fa-solid fa-hourglass-half"></i></div>
+        <div class="item-details">
+          <span class="item-label">Espera / Pausa</span>
+          <span class="item-sub">Aguarda condição ou tempo</span>
+        </div>
+      </div>
+
+      <div class="palette-item" data-node-type="condition" draggable="true" title="Desvio condicional ou tomada de decisão">
+        <div class="item-icon condition-color"><i class="fa-solid fa-code-branch"></i></div>
+        <div class="item-details">
+          <span class="item-label">Decisão / Se</span>
+          <span class="item-sub">Filtro condicional</span>
+        </div>
+      </div>
+
+      <div class="palette-item" data-node-type="output" draggable="true" title="Fim do processo ou resultado esperado">
+        <div class="item-icon output-color"><i class="fa-solid fa-flag-checkered"></i></div>
+        <div class="item-details">
+          <span class="item-label">Resultado / Fim</span>
+          <span class="item-sub">Entrega ou saída</span>
+        </div>
+      </div>
+    </div>
+    
+    <div class="palette-footer">
+      <div class="shortcuts-info">
+        <div><strong>Arrastar:</strong> Clique & segure no fundo</div>
+        <div><strong>Zoom:</strong> Scroll do mouse</div>
+        <div><strong>Conectar:</strong> Arraste entre círculos</div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- The Infinite Canvas Viewport -->
+  <main class="canvas-viewport" id="canvas-viewport">
+    <!-- Dotted Grid (Transforms and translates dynamically) -->
+    <div class="canvas-grid" id="canvas-grid"></div>
+    
+    <!-- Outer transformed container representing the canvas coordinate space -->
+    <div class="canvas-container" id="canvas-container">
+      <!-- SVG connections rendering layer -->
+      <svg class="canvas-connections" id="connections-svg">
+        <defs>
+          <marker id="arrow" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <path d="M 0 2 L 8 5 L 0 8 z" fill="#3b82f6" />
+          </marker>
+          <marker id="arrow-selected" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <path d="M 0 2 L 8 5 L 0 8 z" fill="#60a5fa" />
+          </marker>
+          <!-- currentColor marker: inherits stroke color from path -->
+          <marker id="arrow-cc" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <path d="M 0 2 L 8 5 L 0 8 z" fill="currentColor" />
+          </marker>
+        </defs>
+      </svg>
+      
+      <!-- HTML nodes/cards rendering layer -->
+      <div class="canvas-nodes" id="nodes-container"></div>
+    </div>
+
+    <!-- Box-select rectangle overlay -->
+    <div id="selection-rect" style="display:none;"></div>
+
+    <!-- Edge rule selector (floating, for condition connections) -->
+    <select id="edge-rule-select" style="display:none;"></select>
+
+    <!-- Live Instructions Overlay -->
+    <div class="canvas-instructions">
+      Use o scroll para Zoom (<span id="zoom-percentage">100%</span>) | Botão do meio ou arrastar para navegar
+    </div>
+  </main>
+
+  <!-- Right Sidebar: Properties Panel -->
+  <aside class="properties-panel" id="properties-panel">
+    <button class="close-panel-btn" id="close-properties-btn">&times;</button>
+    <div class="panel-header">
+      <div class="panel-node-badge" id="prop-node-badge">Ação</div>
+      <h2 class="panel-title" id="prop-node-title" contenteditable="true" title="Clique para editar o título">Nome do Nó</h2>
+      <span class="panel-node-id" id="prop-node-id">ID: Node_01</span>
+    </div>
+
+    <div class="panel-scroll-content">
+      <!-- Seção: Identificação Básica -->
+      <div class="panel-section">
+        <label for="prop-desc">Descrição do Passo</label>
+        <textarea id="prop-desc" placeholder="Descreva sucintamente o que é feito nesta etapa do processo..."></textarea>
+      </div>
+
+      <div class="panel-section">
+        <label for="prop-owner">Dono do Processo (Humano / Cargo)</label>
+        <input type="text" id="prop-owner" placeholder="Ex: SDR, Copywriter, Gerente de Vendas (Sem lista de ferramentas)">
+      </div>
+
+      <div class="panel-section-row">
+        <div class="panel-section half-width">
+          <label for="prop-dept">Área / Depto</label>
+          <select id="prop-dept">
+            <option value="geral">Geral</option>
+            <option value="marketing">Marketing</option>
+            <option value="comercial">Comercial</option>
+            <option value="operacoes">Operações</option>
+            <option value="financeiro">Financeiro</option>
+            <option value="rh">RH</option>
+            <option value="administrativo">Administrativo</option>
+          </select>
+        </div>
+        <div class="panel-section half-width">
+          <label for="prop-status">Progresso</label>
+          <select id="prop-status">
+            <option value="pendente">Pendente</option>
+            <option value="mapeamento">Em Mapeamento</option>
+            <option value="concluido">Concluído</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="panel-section-row">
+        <div class="panel-section half-width">
+          <label for="prop-duration">Tempo Estimado</label>
+          <input type="text" id="prop-duration" placeholder="Ex: 2 horas, 2 dias">
+        </div>
+        <div class="panel-section half-width">
+          <label for="prop-frequency">Frequência</label>
+          <select id="prop-frequency">
+            <option value="demanda">Sob demanda</option>
+            <option value="diario">Diário</option>
+            <option value="semanal">Semanal</option>
+            <option value="mensal">Mensal</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Seção: Questionário do Processo (Tags / Formulário) -->
+      <div class="panel-section" id="panel-trigger-output-section">
+        <div class="section-divider-title">Estruturação e Perguntas</div>
+
+        <div class="question-group">
+          <label for="prop-trigger-cond">Gatilho de Entrada (Input)</label>
+          <input type="text" id="prop-trigger-cond" placeholder="O que faz esse passo iniciar?">
+        </div>
+
+        <div class="question-group">
+          <label for="prop-output-cond">Resultado Esperado (Output)</label>
+          <input type="text" id="prop-output-cond" placeholder="Qual o entregável final desta etapa?">
+        </div>
+
+        <div class="question-group">
+          <label for="prop-tools">Ferramentas Utilizadas (Tags separadas por vírgula)</label>
+          <input type="text" id="prop-tools" placeholder="Ex: Kommo CRM, WhatsApp, Make, Slack">
+          <div class="tags-container" id="prop-tools-tags-preview"></div>
+        </div>
+
+        <div class="question-group">
+          <label>Tipo de Desperdício (Lean)</label>
+          <select id="prop-bottleneck-category">
+            <option value="">Selecione o tipo...</option>
+            <option value="espera">⏳ Espera — aguardar aprovação, sistema, pessoa</option>
+            <option value="retrabalho">🔁 Retrabalho — corrigir erros, refazer etapas</option>
+            <option value="handoff">🤝 Handoff mal feito — transferência sem contexto</option>
+            <option value="superprocessamento">⚙️ Superprocessamento — passos desnecessários</option>
+            <option value="estoque">📦 Acúmulo / Fila — backlog parado, tarefas represadas</option>
+            <option value="movimento">🔀 Movimento desnecessário — mudar de sistema, buscar info</option>
+            <option value="superprod">📤 Superprodução — fazer mais do que o necessário</option>
+            <option value="talento">💡 Talento desperdiçado — skills errados para a etapa</option>
+            <option value="outro">✏️ Outro</option>
+          </select>
+        </div>
+
+        <div class="question-group">
+          <label for="prop-bottleneck">Onde isso costuma falhar? (Ponto de Quebra)</label>
+          <textarea id="prop-bottleneck" placeholder="Descreva onde o processo quebra, falha ou costuma dar gargalo..."></textarea>
+        </div>
+      </div>
+
+      <!-- Seção: Subtipo do Resultado (apenas para nó output) -->
+      <div class="panel-section" id="outcome-section" style="display:none;">
+        <div class="section-divider-title">Tipo de Resultado</div>
+        <div class="outcome-toggle">
+          <button class="outcome-btn active" data-outcome="success" id="outcome-btn-success"><i class="fa-solid fa-check"></i> Resultado Esperado</button>
+          <button class="outcome-btn" data-outcome="failure" id="outcome-btn-failure"><i class="fa-solid fa-triangle-exclamation"></i> Falha / Abandono</button>
+        </div>
+      </div>
+
+      <!-- Seção: Espera (apenas para nó wait) -->
+      <div class="panel-section" id="wait-section" style="display:none;">
+        <div class="section-divider-title"><i class="fa-solid fa-hourglass-half"></i> Configuração da Espera</div>
+        <div class="question-group">
+          <label>Tipo de espera</label>
+          <select id="prop-wait-type">
+            <option value="tempo_fixo">Tempo fixo</option>
+            <option value="evento_externo">Evento externo</option>
+          </select>
+        </div>
+        <div class="question-group">
+          <label for="prop-wait-duration">Duração / Prazo</label>
+          <input type="text" id="prop-wait-duration" placeholder="Ex: 24h, 3 dias">
+        </div>
+        <div class="question-group">
+          <label for="prop-wait-trigger">O que desencadeia a retomada?</label>
+          <textarea id="prop-wait-trigger" placeholder="Ex: cliente confirma agendamento, pagamento aprovado..."></textarea>
+        </div>
+      </div>
+
+      <!-- Seção: Script Condicional (para nós action e wait) -->
+      <div class="panel-section" id="action-script-section" style="display:none;">
+        <div class="section-divider-title"><i class="fa-solid fa-code"></i> Script Condicional</div>
+        <p class="section-subtext">SE [condição] → [comportamento] dentro desta etapa. Não redireciona o fluxo — apenas modifica o comportamento interno.</p>
+        <ul id="script-conditions-list" style="list-style:none;padding:0;margin:0 0 8px;"></ul>
+        <button class="add-rule-btn" id="btn-add-script" style="border-color:rgba(96,165,250,0.3);color:var(--accent-glow);"><i class="fa-solid fa-plus"></i> Adicionar SE</button>
+      </div>
+
+      <!-- Seção: Switch / Decisão (apenas para nó condition) -->
+      <div class="panel-section" id="condition-rules-section" style="display:none;">
+        <div class="section-divider-title"><i class="fa-solid fa-shuffle"></i> Switch — Decisão de Roteamento</div>
+        <p class="section-subtext">Define em qual campo o fluxo se bifurca. Cada caso vira um output colorido no card. O "Senão" é sempre gerado automaticamente.</p>
+        <div class="question-group">
+          <label for="prop-switch-field">Campo avaliado</label>
+          <input type="text" id="prop-switch-field" placeholder="Ex: tipo_cliente, aprovacao, cobertura">
+        </div>
+        <ul id="switch-cases-list" style="list-style:none;padding:0;margin:0 0 8px;display:flex;flex-direction:column;gap:4px;"></ul>
+        <button class="add-rule-btn" id="btn-add-switch-case"><i class="fa-solid fa-plus"></i> Adicionar caso</button>
+        <p class="section-subtext" style="margin-top:8px;opacity:0.5">O caso "Senão" é sempre gerado automaticamente no card.</p>
+      </div>
+
+      <!-- Seção: Subprocessos -->
+      <div class="panel-section">
+        <div class="section-divider-title">Subprocessos Aninhados</div>
+
+        <div class="subprocess-mode-toggle">
+          <button class="sub-mode-btn active" id="btn-mode-checklist" data-mode="checklist"><i class="fa-solid fa-list-check"></i> Checklist</button>
+          <button class="sub-mode-btn" id="btn-mode-canvas" data-mode="canvas"><i class="fa-solid fa-diagram-project"></i> Canvas Filho</button>
+        </div>
+
+        <!-- Checklist mode -->
+        <div id="subprocess-checklist-section">
+          <div class="subprocess-input-container">
+            <input type="text" id="subprocess-input" placeholder="Adicionar subprocesso...">
+            <button id="btn-add-subprocess"><i class="fa-solid fa-plus"></i></button>
+          </div>
+          <ul class="subprocess-list" id="subprocess-list">
+            <!-- Dinamicamente preenchido -->
+          </ul>
+        </div>
+
+        <!-- Canvas filho mode -->
+        <div class="panel-section" id="medicao-section">
+          <label>Medição</label>
+          <p class="section-subtext">Onde este passo é medido, e para quem o número volta. Sem destinatário, a malha fica aberta.</p>
+          <button class="enter-child-canvas-btn" id="btn-medir-passo"><i class="fa-solid fa-circle-dot"></i> Medir este passo</button>
+          <div id="medicao-lista"></div>
+        </div>
+
+        <div id="subprocess-canvas-section" style="display:none;">
+          <p class="section-subtext">Este processo tem ramificações, múltiplos donos ou decisões condicionais. Mapeie em um canvas dedicado.</p>
+          <button class="enter-child-canvas-btn" id="btn-enter-child-canvas"><i class="fa-solid fa-arrow-up-right-from-square"></i> Entrar no Canvas Filho</button>
+          <p class="child-canvas-count" id="child-canvas-count" style="display:none;"></p>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel-footer">
+      <button id="btn-delete-node" class="delete-node-btn"><i class="fa-solid fa-trash"></i> Excluir Bloco</button>
+    </div>
+  </aside>
+
+  <!-- HOME SCREEN: Multi-canvas management -->
+  <div id="home-screen" style="display:none;">
+    <aside class="home-sidebar">
+      <div class="home-sidebar-logo">
+        <svg class="brand-monogram" width="24" height="24" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <linearGradient id="logo-grad-home" x1="0%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%" stop-color="#60a5fa" />
+              <stop offset="100%" stop-color="#2563eb" />
+            </linearGradient>
+          </defs>
+          <path d="M42 12 H58 L80 88 H66 L66 48 H57 L57 88 H43 L43 48 H34 L34 88 H20 Z" fill="url(#logo-grad-home)" />
+        </svg>
+        <span class="home-logo-text">AUDACES <span>AI</span></span>
+      </div>
+
+      <nav class="home-sidebar-nav">
+        <div class="home-nav-label">Empresas</div>
+        <div id="home-folder-nav"><!-- pasta-nav renderizado dinamicamente --></div>
+      </nav>
+
+      <div class="home-sidebar-footer">
+        <button class="home-new-folder-btn" id="home-btn-new-folder">
+          <i class="fa-solid fa-folder-plus"></i> Nova Empresa
+        </button>
+      </div>
+    </aside>
+
+    <main class="home-main">
+      <div class="home-toolbar">
+        <div class="home-toolbar-left">
+          <h1 class="home-title" id="home-title">Canvases</h1>
+          <span class="home-canvas-count" id="home-canvas-count"></span>
+        </div>
+        <div class="home-toolbar-right">
+          <button id="home-btn-new-canvas" class="home-primary-btn">
+            <i class="fa-solid fa-plus"></i> Novo Canvas
+          </button>
+        </div>
+      </div>
+
+      <div class="home-folder-list" id="home-folder-list">
+        <!-- Pastas e cards renderizados dinamicamente -->
+      </div>
+    </main>
+  </div>
+
+  <!-- Global Modal: AI Audit Panel -->
+  <div class="modal-overlay" id="audit-modal">
+    <div class="modal-content">
+      <button class="close-modal-btn" id="close-audit-btn">&times;</button>
+      <div class="modal-header">
+        <div class="modal-title-glow">
+          <i class="fa-solid fa-wand-magic-sparkles"></i> AUDACES PROCESS AUDITOR
+        </div>
+        <p class="modal-subtitle">Relatório detalhado de gargalos, dependências e automação estruturado por Inteligência Artificial</p>
+      </div>
+      
+      <div class="modal-body">
+        <div class="audit-summary-cards">
+          <div class="summary-card">
+            <span class="card-num" id="audit-count-nodes">0</span>
+            <span class="card-lbl">Passos Mapeados</span>
+          </div>
+          <div class="summary-card warning-glow">
+            <span class="card-num" id="audit-count-bottlenecks">0</span>
+            <span class="card-lbl">Gargalos Identificados</span>
+          </div>
+          <div class="summary-card success-glow">
+            <span class="card-num" id="audit-count-integrations">0</span>
+            <span class="card-lbl">Ferramentas Mapeadas</span>
+          </div>
+        </div>
+
+        <!-- Health Score Block -->
+        <div class="health-score-block" id="health-score-block" style="display:none;">
+          <div class="hs-left">
+            <div class="hs-dial">
+              <svg viewBox="0 0 120 120" class="hs-ring-svg">
+                <circle class="hs-ring-bg" cx="60" cy="60" r="50"/>
+                <circle class="hs-ring-fill" id="hs-ring-fill" cx="60" cy="60" r="50"/>
+              </svg>
+              <div class="hs-score-inner">
+                <span class="hs-score-num" id="hs-score-num">--</span>
+                <span class="hs-score-label">/ 100</span>
+              </div>
+            </div>
+            <div class="hs-badge" id="hs-badge">—</div>
+          </div>
+          <div class="hs-right">
+            <p class="hs-title">Health Score do Processo</p>
+            <div class="hs-factors" id="hs-factors"></div>
+          </div>
+        </div>
+
+        <div class="audit-tabs">
+          <button class="audit-tab-btn active" data-tab="tab-analysis">Análise do Fluxo</button>
+          <button class="audit-tab-btn" data-tab="tab-sop">Procedimentos (SOPs)</button>
+          <button class="audit-tab-btn" data-tab="tab-automations">Automações (Make/n8n)</button>
+          <button class="audit-tab-btn" data-tab="tab-prompt">Copiar Base de Dados (Prompt)</button>
+        </div>
+
+        <div class="tab-content active" id="tab-analysis">
+          <!-- Relatório da IA gerado dinamicamente -->
+          <div id="ai-report-analysis" class="markdown-body">
+            Selecione ou crie nós, conecte-os e configure as descrições para rodar a auditoria.
+          </div>
+        </div>
+
+        <div class="tab-content" id="tab-sop">
+          <div id="ai-report-sop" class="markdown-body">
+            Selecione ou crie nós, conecte-os e configure as descrições para rodar a auditoria.
+          </div>
+        </div>
+
+        <div class="tab-content" id="tab-automations">
+          <div id="ai-report-automations" class="markdown-body">
+            Selecione ou crie nós, conecte-os e configure as descrições para rodar a auditoria.
+          </div>
+        </div>
+
+        <div class="tab-content" id="tab-prompt">
+          <p class="prompt-tab-desc">Você pode copiar a base de dados abaixo estruturada em JSON e colá-la em um Large Language Model (como o ChatGPT, Claude ou Gemini) com um prompt personalizado para uma análise ainda mais profunda.</p>
+          <div class="prompt-box-container">
+            <pre><code id="db-prompt-content">Prompt pronto para ser copiado...</code></pre>
+            <button id="btn-copy-prompt" class="copy-prompt-btn"><i class="fa-solid fa-copy"></i> Copiar Dados + Prompt</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button id="btn-re-audit" class="re-audit-btn"><i class="fa-solid fa-arrows-rotate"></i> Recalcular Auditoria</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Edge label floating input (lives outside SVG/canvas transform) -->
+  <input type="text" id="edge-label-input" placeholder="O que passa aqui..." style="display:none;" autocomplete="off">
+
+  <script src="api.js"></script>
+  <script src="fieldmeta.js"></script>
+  <script src="app.js"></script>
+  <script src="expand.js"></script>
+  <script src="evidencia.js"></script>
+  <script src="breakpoints.js"></script>
+  <script src="markdown.js"></script>
+  <script src="oportunidades.js"></script>
+  <script src="agent.js"></script>
+</body>
+</html>

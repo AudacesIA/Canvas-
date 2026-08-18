@@ -1,0 +1,7 @@
+node_modules/
+.DS_Store
+.env
+
+# Os dados dos clientes ficam fora do repo de código.
+# data/ é versionado no seu próprio repo git (ver plano, risco 7).
+data/
