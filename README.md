@@ -90,49 +90,51 @@ patologia que a camada existe para tornar visível — o alerta que cai num e-ma
 que ninguém lê. `diagnose` acusa, e no mapa o **anel da bolinha fica tracejado**,
 sem precisar de legenda.
 
-A bolinha diz três coisas sem ser aberta: o anel (malha), o preenchimento
-(evidência, mesma regra do resto do mapa) e dois contadores de achados e
-hipóteses, que somem no zero. Clicar abre o popover — a visão de reunião.
+A bolinha diz duas coisas sem ser aberta: o anel (malha fecha ou não) e o
+preenchimento (força da evidência, mesma regra do resto do mapa). Clicar abre o
+popover — a visão de reunião — e de lá se edita o que mede, a cadência e quem
+recebe.
 
 Ops: `addBreakpoint` · `updateBreakpoint` · `removeBreakpoint`.
 Leitura: **`get_breakpoints`**, entregue no mesmo passo da escrita. O subprocesso
 e os `refs` nasceram cegos e ficaram assim por meses; não se repete.
 
-## Camadas de Diagnóstico e Hipóteses
+## Oportunidade de receita
 
-`canvas.achados` e `canvas.hipoteses`, irmãs de `breakpoints`. Achado é o que a
-medição revelou — não é o gargalo do card, que continua sendo a marcação rápida
-do consultor; o achado pende de um ponto de medição, inclusive de um breakpoint
-de **aresta**, onde não há nó a que pertencer.
+`canvas.oportunidades`, ancoradas numa **aresta** — a receita que se perde mora
+na passagem de bastão, onde ninguém é dono do prejuízo. Cada uma é
+`{ titulo, markdown }`: bloco de notas livre, não formulário.
 
-**Reformular uma hipótese EMPILHA versão, nunca sobrescreve**, e exige `porque`.
-É o que separa isto de uma lista de melhorias: o raciocínio que morreu continua
-legível, e ninguém repropõe em março o que foi refutado em janeiro.
+```jsonc
+{ "id": "op_…", "arestaId": "conn_…", "titulo": "Reenvio proativo",
+  "markdown": "## Onde está o dinheiro\n79 pedidos/mês…" }
+```
 
-A cor segue a regra do resto do mapa — força visual = evidência:
+No mapa o que se vê é um **asterisco verde** com "N oportunidades de receita"
+embaixo. Clicar revela os cards, ligados a ele por setas verdes; clicar num card
+abre o **bloco de notas**, com abas escrever/ler. Escondido por padrão porque
+quatro camadas desenhando ao mesmo tempo viram árvore de Natal.
 
-Achado e hipótese pendem de um **breakpoint**: só se propõe intervenção onde se
-mede, e é a medição que depois diz se funcionou. Os dois são criados à mão, pelo
-popover do ponto de medição — nascem na conversa com o cliente, não depois. O
-veredito (em teste / confirmar / refutar) fica no próprio card, e **reformular
-exige o motivo**, empilhando a versão anterior no histórico.
+Órfã é descartada na hidratação quando a passagem some. O modelo anterior
+sobrevivia no dado e sumia da tela, porque a posição dependia da âncora existir —
+dado invisível é pior que dado ausente.
 
-O botão **Hipóteses** abre o quadro: Proposta → Em teste → Veredito, com os
-prazos vencidos em vermelho. O canvas responde ONDE; o quadro responde EM QUE PÉ.
-Clicar num card volta ao ponto de medição de origem.
+**Markdown** é renderizado por `web/markdown.js`, ~90 linhas, sem dependência:
+o projeto é local-first e uma biblioteca por CDN quebraria o uso offline. O
+escape de HTML roda ANTES de qualquer transformação — é o único ponto do projeto
+onde texto do usuário vira `innerHTML`. Consequência deliberada: HTML embutido
+no Markdown não é interpretado. Link só aceita `http(s)`.
 
-| status | desenho |
-|---|---|
-| `proposta` | contorno tracejado — não provamos nada |
-| `em_teste` | pontilhado |
-| `confirmada` | verde sólido |
-| `refutada` | riscado, cinza |
+Ops: `addOportunidade` · `updateOportunidade` · `removeOportunidade`.
+Leitura: **`get_oportunidades`**, com o corpo inteiro (o outline traz só títulos,
+para não estourar o orçamento de token que justifica a existência dele).
 
-Verde cheio em hipótese não testada seria mentira: verde lê como "resolvido", e
-proposta é dívida, não conquista.
+### Quatro marcas, uma aresta
 
-Ops: `addAchado` · `updateAchado` · `addHipotese` · `updateHipotese`.
-Leitura: **`get_hipoteses`**, com o histórico de versões incluído.
+Rótulo, barra de gargalo, bolinha de medição e asterisco disputam o ponto médio.
+`pontoNaAresta()` (`web/app.js`) é o único lugar que decide o deslocamento de
+cada faixa — três arquivos decidindo separadamente foi como todas acabaram
+empilhadas no mesmo pixel.
 
 ## Gargalo na passagem
 
@@ -187,7 +189,7 @@ Onze tools:
 | `propose_changeset` | propõe alterações em blocos revisáveis |
 | `suggest_layout` | calcula posições; não aplica |
 | `get_breakpoints` | onde o processo é medido, e o que está em malha aberta |
-| `get_hipoteses` | o que foi proposto, o que morreu e o que segue em aberto |
+| `get_oportunidades` | onde há dinheiro na mesa, com as notas inteiras |
 | `validate_canvas` | checagens estruturais e de legibilidade |
 | `list_pending_proposals` | o que ficou esperando revisão |
 | `focus_canvas` | destaca nós na tela do consultor |
@@ -218,7 +220,7 @@ AUDASYS_TEST=1 npm start
 Carrega o app real num iframe e percorre o caminho inteiro: propor → SSE →
 fantasma na tela → aceitar → nó sólido → persistido com id definitivo. Depois
 cobre procedência, métricas tipadas, layout, `validate_canvas` e subprocesso.
-**102 verificações.** Cria e apaga um cliente temporário.
+**95 verificações.** Cria e apaga um cliente temporário.
 
 O Chrome headless não encerra sozinho ao terminar; o resultado sai em
 `/tmp/audasys-e2e-report.json` e no log do daemon antes disso.
@@ -302,7 +304,7 @@ palpite como fato apurado.
 
 ## Estado
 
-G0–G7 concluídos. **102/102 no e2e.**
+G0–G7 concluídos. **95/95 no e2e.**
 
 > A suíte ficou abortando na metade por um tempo: ela chamava `GET …/validation`,
 > rota removida junto com o antigo modal de validação, e o `catch` único engolia

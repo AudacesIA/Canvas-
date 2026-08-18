@@ -47,9 +47,10 @@
       const el = document.getElementById(node.id);
       return { x: node.x + (el?.offsetWidth ?? 220) - 10, y: node.y - 10 };
     }
+    // Faixa própria na aresta: o ponto médio já é do rótulo e da barra de
+    // gargalo. Quem decide o deslocamento é `pontoNaAresta`, em app.js.
     const conn = connections.find((c) => c.id === bp.alvo.id);
-    if (!conn || conn.midX == null) return null;
-    return { x: conn.midX, y: conn.midY };
+    return window.pontoNaAresta?.(conn, 'medicao') ?? null;
   }
 
   function render(bp) {
@@ -152,9 +153,89 @@
       }</div>
       <div class="bp-pop-linha"><span>evidência</span> ${escapeHtml(bp.evidencia)}</div>
       ${ultimo?.valor != null ? `<div class="bp-pop-linha"><span>última leitura</span> ${ultimo.valor}${escapeHtml(ultimo.unidade)}</div>` : ''}
-`;
+      <div class="garg-foot">
+        <button class="arb-btn ghost" data-editar-bp="${bp.id}">editar</button>
+      </div>`;
     document.body.appendChild(pop);
     pop.addEventListener('pointerdown', (e) => e.stopPropagation());
+  }
+
+  /**
+   * Edição do ponto de medição.
+   *
+   * Faltava desde que a camada nasceu: dava para criar e não para editar. O
+   * efeito apareceu nos dados — os cinco breakpoints reais deste projeto ficaram
+   * com o texto que o sistema gerou ("tempo de X") e TODOS em malha aberta, não
+   * porque a operação não meça, mas porque não havia onde dizer quem recebe.
+   *
+   * `malha` continua derivada e não aparece aqui: ela fecha sozinha quando o
+   * consumidor é declarado. Oferecer um seletor de malha deixaria fechar no
+   * campo sem ter fechado na operação.
+   */
+  function editar(bp) {
+    document.getElementById('bp-form')?.remove();
+    const pos = posicao(bp);
+    if (!pos) return;
+
+    const box = document.createElement('div');
+    box.id = 'bp-form';
+    box.className = 'bp-popover';
+    box.style.left = `${pos.x + 16}px`;
+    box.style.top = `${pos.y + 16}px`;
+    const opcao = (v, r, atual) => `<option value="${v}"${v === atual ? ' selected' : ''}>${r}</option>`;
+    box.innerHTML = `
+      <div class="bp-pop-head"><b>Ponto de medição</b>
+        <button class="bp-pop-fechar" data-fechar-bp>✕</button></div>
+      <label class="hp-form-rot">O que se mede</label>
+      <input id="bp-mede" value="${escapeHtml(bp.oQueMede)}" placeholder="tempo entre embalar e coletar">
+      <label class="hp-form-rot">Com que frequência</label>
+      <select id="bp-cad">
+        ${['continua', 'diaria', 'semanal', 'mensal', 'eventual']
+          .map((c) => opcao(c, c, bp.cadencia)).join('')}
+      </select>
+      <label class="hp-form-rot">Quem RECEBE o número e pode agir</label>
+      <input id="bp-quem" value="${escapeHtml(bp.consumidor.quem)}" placeholder="deixe vazio se ninguém recebe">
+      <label class="hp-form-rot">Como chega até essa pessoa</label>
+      <input id="bp-como" value="${escapeHtml(bp.consumidor.comoChega)}" placeholder="planilha, painel, reunião…">
+      <label class="hp-form-rot">Força da evidência de que isso é medido</label>
+      <select id="bp-evid">
+        ${[['assumed', 'supus'], ['inferred', 'deduzi'], ['reported', 'alguém relatou'],
+           ['observed', 'eu vi acontecer'], ['documented', 'tenho documento']]
+          .map(([v, r]) => opcao(v, r, bp.evidencia)).join('')}
+      </select>
+      <div class="garg-foot">
+        <button class="arb-btn danger" data-excluir-bp>Excluir</button>
+        <button class="arb-btn primary" data-salvar-bp>Salvar</button>
+      </div>`;
+    document.body.appendChild(box);
+    box.addEventListener('pointerdown', (e) => e.stopPropagation());
+    box.querySelector('#bp-mede').focus();
+
+    box.addEventListener('click', (e) => {
+      if (e.target.closest('[data-fechar-bp]')) return box.remove();
+      if (e.target.closest('[data-excluir-bp]')) {
+        if (!confirm(`Excluir o ponto de medição "${bp.oQueMede}"?`)) return;
+        box.remove();
+        document.getElementById('bp-popover')?.remove();
+        remover(bp.id);
+        return;
+      }
+      if (!e.target.closest('[data-salvar-bp]')) return;
+
+      bp.oQueMede = box.querySelector('#bp-mede').value.trim();
+      bp.cadencia = box.querySelector('#bp-cad').value;
+      bp.consumidor = {
+        quem: box.querySelector('#bp-quem').value.trim(),
+        comoChega: box.querySelector('#bp-como').value.trim(),
+      };
+      bp.evidencia = box.querySelector('#bp-evid').value;
+      // Derivada, como no servidor: quem recebe é o que fecha a malha.
+      bp.malha = bp.consumidor.quem ? 'fechada' : 'aberta';
+      box.remove();
+      saveToLocalStorage();
+      renderTodos();
+      abrirPopover(bp);
+    });
   }
 
   /** Criação pela interface. Devolve o breakpoint para quem chamou editar. */
@@ -240,6 +321,6 @@
 
   window.AudasysBreakpoints = {
     render, renderTodos, reposicionar, criar, remover,
-    naAresta, esconderOfertaDaAresta, abrirPopover, marcarPainel,
+    naAresta, esconderOfertaDaAresta, abrirPopover, marcarPainel, editar,
   };
 })();

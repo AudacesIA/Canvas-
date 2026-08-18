@@ -42,8 +42,7 @@
    * arestas. Por isso o asterisco fica DESLOCADO do meio.
    */
   function posicaoAsterisco(conn) {
-    if (conn.midX == null) return null;
-    return { x: conn.midX + 34, y: conn.midY - 6 };
+    return window.pontoNaAresta?.(conn, 'oportunidade') ?? null;
   }
 
   function renderTodos() {

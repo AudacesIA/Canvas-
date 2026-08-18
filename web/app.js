@@ -898,18 +898,38 @@ function renderConnectionDOM(conn) {
   updateConnectionStyle(conn);
 }
 
-/** Posiciona a barra de gargalo no meio da aresta, inclinada sobre a linha. */
+/**
+ * Faixas na aresta.
+ *
+ * QUATRO coisas querem o ponto médio: o rótulo, a barra de gargalo, a bolinha de
+ * medição e o asterisco de receita. Empilhadas no mesmo pixel, nenhuma se lê —
+ * e três das cinco medições reais deste projeto estão em arestas, então não é
+ * caso hipotético.
+ *
+ * Um único lugar decide o deslocamento de cada uma. Três arquivos decidindo
+ * separadamente foi exatamente como elas acabaram todas no meio.
+ */
+const FAIXA_NA_ARESTA = { gargalo: -42, rotulo: 0, medicao: 42, oportunidade: 82 };
+
+function pontoNaAresta(conn, faixa) {
+  if (!conn || conn.midX == null) return null;
+  return { x: conn.midX + (FAIXA_NA_ARESTA[faixa] ?? 0), y: conn.midY };
+}
+window.pontoNaAresta = pontoNaAresta;
+
+/** Posiciona a barra de gargalo na faixa dela, inclinada sobre a linha. */
 function posicionarGargalo(conn) {
   const marca = document.getElementById(conn.id + '-gargalo');
   if (!marca) return;
   if (!conn.gargalo?.texto) { marca.style.display = 'none'; return; }
 
   const R = 11;   // metade do comprimento da barra
+  const p = pontoNaAresta(conn, 'gargalo');
   marca.style.display = '';
-  marca.setAttribute('x1', conn.midX - R * 0.5);
-  marca.setAttribute('y1', conn.midY + R);
-  marca.setAttribute('x2', conn.midX + R * 0.5);
-  marca.setAttribute('y2', conn.midY - R);
+  marca.setAttribute('x1', p.x - R * 0.5);
+  marca.setAttribute('y1', p.y + R);
+  marca.setAttribute('x2', p.x + R * 0.5);
+  marca.setAttribute('y2', p.y - R);
   const cats = conn.gargalo.categorias?.join(', ') || 'sem categoria';
   marca.setAttribute('title', `${conn.gargalo.texto} (${cats})`);
 }
