@@ -206,5 +206,28 @@
     }
   }
 
-  window.AudasysComparador = { abrirModalComparador, abrirListaCenarios };
+  function toggleListaCenarios(clientId, baseCanvasId) {
+    const existing = document.getElementById('cenarios-lista-overlay');
+    if (existing) {
+      existing.remove();
+      return;
+    }
+    abrirListaCenarios(clientId, baseCanvasId);
+  }
+
+  function toggleModalComparador(clientId, cenarioId) {
+    const existing = document.getElementById('comparador-modal');
+    if (existing) {
+      existing.remove();
+      return;
+    }
+    abrirModalComparador(clientId, cenarioId);
+  }
+
+  window.AudasysComparador = {
+    abrirModalComparador,
+    toggleModalComparador,
+    abrirListaCenarios,
+    toggleListaCenarios,
+  };
 })();

@@ -98,6 +98,7 @@
 
   function toggleChat() {
     drawer = criarDrawer();
+    isOpen = drawer.classList.contains('open');
     isOpen = !isOpen;
     drawer.classList.toggle('open', isOpen);
     if (isOpen) {

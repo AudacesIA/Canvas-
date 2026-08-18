@@ -470,7 +470,16 @@
     });
   }
 
-  document.getElementById('btn-oportunidades')?.addEventListener('click', abrirLista);
+  function toggleLista() {
+    const existing = document.getElementById('op-lista-overlay');
+    if (existing) {
+      existing.remove();
+      return;
+    }
+    abrirLista();
+  }
 
-  window.AudasysOportunidades = { renderTodos, novaNaAresta, abrirNotepad, abrirLista, abrirModalCriarCenario };
+  document.getElementById('btn-oportunidades')?.addEventListener('click', toggleLista);
+
+  window.AudasysOportunidades = { renderTodos, novaNaAresta, abrirNotepad, abrirLista, toggleLista, abrirModalCriarCenario };
 })();

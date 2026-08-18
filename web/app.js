@@ -1746,7 +1746,13 @@ viewport.addEventListener('drop', (e) => {
 });
 
 // 7. AI AUDITOR ENGINE (CALCULATED ANALYZER)
-btnAudit.addEventListener('click', runAiAudit);
+btnAudit.addEventListener('click', () => {
+  if (auditModal.classList.contains('open')) {
+    auditModal.classList.remove('open');
+  } else {
+    runAiAudit();
+  }
+});
 btnReAudit.addEventListener('click', runAiAudit);
 closeAuditBtn.addEventListener('click', () => auditModal.classList.remove('open'));
 
@@ -2314,7 +2320,7 @@ document.getElementById('btn-add-note').addEventListener('click', () => {
 // Cenários no Topo
 document.getElementById('btn-comparar-cenario-topo')?.addEventListener('click', () => {
   if (activeClientId && activeCanvasId && window.AudasysComparador) {
-    window.AudasysComparador.abrirModalComparador(activeClientId, activeCanvasId);
+    window.AudasysComparador.toggleModalComparador(activeClientId, activeCanvasId);
   }
 });
 
@@ -2326,7 +2332,7 @@ document.getElementById('btn-voltar-processo-base')?.addEventListener('click', (
 
 document.getElementById('btn-listar-cenarios-topo')?.addEventListener('click', () => {
   if (activeClientId && activeCanvasId && window.AudasysComparador) {
-    window.AudasysComparador.abrirListaCenarios(activeClientId, activeCanvasId);
+    window.AudasysComparador.toggleListaCenarios(activeClientId, activeCanvasId);
   }
 });
 
