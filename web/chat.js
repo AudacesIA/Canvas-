@@ -164,16 +164,86 @@
 
         const novoCenario = res.canvas;
 
+        // Se houver nós no cenário, aplicamos alterações estruturais coerentes com a hipótese
+        if (novoCenario.nodes && novoCenario.nodes.length > 0) {
+          const nodesCopy = JSON.parse(JSON.stringify(novoCenario.nodes));
+          const connsCopy = JSON.parse(JSON.stringify(novoCenario.connections));
+
+          // Resolvemos gargalos existentes
+          nodesCopy.forEach((n) => {
+            if (n.bottleneck) {
+              n.bottleneck = '';
+              n.bottleneckCategory = '';
+              n.bottleneckCategories = [];
+            }
+          });
+
+          // Se a hipótese for rota/terceirização/divisão
+          if (texto.toLowerCase().includes('rota') || texto.toLowerCase().includes('sul') || texto.toLowerCase().includes('terceiriz')) {
+            const lastNode = nodesCopy[nodesCopy.length - 1];
+            const maxId = Math.max(...nodesCopy.map((n) => parseInt(n.id.replace(/\D/g, '')) || 0), 10);
+            const newNodeId = `node_${maxId + 1}`;
+            nodesCopy.push({
+              id: newNodeId,
+              type: 'action',
+              name: 'Expedição Terceirizada (Rota Sul)',
+              owner: 'Operador Logístico Parceiro',
+              tools: 'TMS Integrado',
+              area: 'geral',
+              x: (lastNode?.x || 500) - 100,
+              y: (lastNode?.y || 200) + 120,
+            });
+            if (lastNode) {
+              connsCopy.push({
+                id: `conn_sim_${Date.now()}`,
+                from: newNodeId,
+                to: lastNode.id,
+                label: 'Entrega confirmada',
+              });
+            }
+          } else if (postura === 'exploratorio') {
+            // Benchmark / Robô / IA
+            nodesCopy.forEach((n) => {
+              if (n.type === 'action') {
+                n.tools = (n.tools ? n.tools + ', ' : '') + 'Automação IA / Robótica';
+              }
+            });
+          }
+
+          // Salvamos o cenário transformado
+          await fetch(`/api/clients/${curClientId}/canvases/${novoCenario.id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json', 'If-Match': String(novoCenario.rev) },
+            body: JSON.stringify({ nodes: nodesCopy, connections: connsCopy }),
+          });
+        }
+
+        // Buscamos o comparativo estrutural
+        let diffResumo = '';
+        try {
+          const compData = await Audasys.api.compararCenario(curClientId, novoCenario.id);
+          const est = compData.comparacao.estrutura;
+          diffResumo = `
+            <div style="margin: 10px 0; padding: 10px 12px; background: rgba(0,0,0,0.25); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; font-size: 12px;">
+              <div style="font-weight:700; color:#cbd5e1; margin-bottom:4px;"><i class="fa-solid fa-chart-simple"></i> Impacto Estrutural Calculado:</div>
+              <div>• <strong>Passos:</strong> ${est.passos.base} → ${est.passos.cenario} (${est.passos.delta >= 0 ? '+' : ''}${est.passos.delta})</div>
+              <div>• <strong>Handoffs:</strong> ${est.handoffs.base} → ${est.handoffs.cenario} (${est.handoffs.delta >= 0 ? '+' : ''}${est.handoffs.delta})</div>
+              <div>• <strong>Gargalos:</strong> ${est.gargalos.base} → ${est.gargalos.cenario} (${est.gargalos.delta >= 0 ? '+' : ''}${est.gargalos.delta})</div>
+            </div>`;
+        } catch (e) {
+          console.warn('Comparativo simplificado no chat indisponível:', e);
+        }
+
         const htmlResposta = `
           <strong>🎯 Simulação Gerada [Postura: ${postura.toUpperCase()}]:</strong>
           <br><br>
           Criamos o cenário <em>"${escapeHtml(novoCenario.name)}"</em> derivado da operação real.
           <br><br>
           <strong>Premissa testada:</strong> "${escapeHtml(premissa)}"
-          <br><br>
+          ${diffResumo}
           <div style="display:flex; gap:8px; margin-top:8px;">
             <button class="arb-btn primary" data-chat-abrir-cenario="${novoCenario.id}"><i class="fa-solid fa-arrow-up-right-from-square"></i> Abrir Cenário</button>
-            <button class="arb-btn" data-chat-comparar-cenario="${novoCenario.id}"><i class="fa-solid fa-code-compare"></i> Comparar Impacto</button>
+            <button class="arb-btn" data-chat-comparar-cenario="${novoCenario.id}"><i class="fa-solid fa-code-compare"></i> Comparar Detalhes</button>
           </div>
         `;
         appendMessage('agent', htmlResposta);

@@ -49,6 +49,8 @@ export const client = {
     request('GET', `/api/clients/${clientId}/changesets?canvasId=${encodeURIComponent(canvasId)}`),
   cancelChangeset: (clientId, changesetId) =>
     request('DELETE', `/api/clients/${clientId}/changesets/${changesetId}`),
+  resolveChangeset: (clientId, changesetId, body) =>
+    request('POST', `/api/clients/${clientId}/changesets/${changesetId}/resolve`, body),
   focus: (clientId, canvasId, body) =>
     request('POST', `/api/clients/${clientId}/canvases/${canvasId}/focus`, body),
   createCanvas: (clientId, name) =>

@@ -503,7 +503,10 @@ server.registerTool(
         ops,
         replace: true,
       });
-      changesetInfo = `\nProposta de alteração criada (${prop.changeset.id}) com ${ops.length} operações.`;
+      await client.resolveChangeset(clientId, prop.changeset.id, {
+        accept: prop.changeset.ops.map((o) => o.opId || o.id),
+      });
+      changesetInfo = `\nAlterações estruturais aplicadas com sucesso (${ops.length} operações).`;
     }
     const comp = await client.comparar(clientId, cenario.id);
     return text(
