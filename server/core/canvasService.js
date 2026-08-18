@@ -135,7 +135,7 @@ export class CanvasService {
    * Cenário de cenário é recusado. Um fork de fork perde a referência ao que a
    * operação realmente faz, e a comparação deixa de significar alguma coisa.
    */
-  async criarCenario(clientId, canvasId, { nome, premissa, postura = 'realista' }) {
+  async criarCenario(clientId, canvasId, { nome, premissa, postura = 'realista', oportunidadeId = null } = {}) {
     const base = await this.getCanvas(clientId, canvasId);
     if (base.derivadoDe) {
       throw httpError(409,
@@ -147,12 +147,33 @@ export class CanvasService {
         'Cenário exige "premissa": a frase que o originou. Sem ela, daqui a seis semanas '
         + 'ninguém consegue contestar o desenho — nem lembrar por que ele existe.');
     }
-    return this.createCanvas(clientId, {
+    const cenario = await this.createCanvas(clientId, {
       name: nome || `${base.name} — ${premissa}`.slice(0, 80),
       folderId: base.folderId,
       seed: strip(base),
-      derivadoDe: { canvasId: base.id, premissa: String(premissa).trim(), postura },
+      derivadoDe: {
+        canvasId: base.id,
+        premissa: String(premissa).trim(),
+        postura,
+        oportunidadeId: oportunidadeId ? String(oportunidadeId) : null,
+      },
     });
+
+    // Se nasceu de uma oportunidade de receita, amarra de volta no canvas base
+    if (oportunidadeId && Array.isArray(base.oportunidades)) {
+      const idx = base.oportunidades.findIndex((o) => o.id === oportunidadeId);
+      if (idx !== -1) {
+        const opsAtualizadas = [...base.oportunidades];
+        opsAtualizadas[idx] = {
+          ...opsAtualizadas[idx],
+          cenarioId: cenario.id,
+          status: 'simulado',
+        };
+        await this.saveCanvas(clientId, base.id, { oportunidades: opsAtualizadas });
+      }
+    }
+
+    return cenario;
   }
 
   /** Cenários derivados de um canvas. */

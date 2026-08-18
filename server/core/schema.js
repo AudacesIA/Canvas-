@@ -427,12 +427,15 @@ export const POSTURAS = ['realista', 'otimista', 'pessimista', 'exploratorio'];
  * aceita o volume mínimo". É a diferença entre um cenário que o dono contesta na
  * reunião e um número que ele engole sem entender.
  */
+export const OPORTUNIDADE_STATUS = ['ideia', 'simulado', 'validado', 'descartado'];
+
 export function hydrateDerivadoDe(raw) {
   if (!raw || typeof raw !== 'object' || !raw.canvasId) return null;
   return {
     canvasId: String(raw.canvasId),
     premissa: String(raw.premissa ?? ''),
     postura: oneOf(raw.postura, POSTURAS, 'realista'),
+    oportunidadeId: raw.oportunidadeId ? String(raw.oportunidadeId) : null,
     criadoEm: raw.criadoEm ?? new Date().toISOString(),
   };
 }
@@ -494,6 +497,9 @@ export function hydrateOportunidade(raw, index = 0) {
     arestaId: raw?.arestaId ?? null,
     titulo: String(raw?.titulo ?? ''),
     markdown: String(raw?.markdown ?? ''),
+    posturaSugerida: oneOf(raw?.posturaSugerida, POSTURAS, 'realista'),
+    status: oneOf(raw?.status, OPORTUNIDADE_STATUS, 'ideia'),
+    cenarioId: raw?.cenarioId ? String(raw.cenarioId) : null,
     // Posição própria, arrastável como um nó. `null` = ainda não foi movida, e
     // aí o cliente empilha a partir do asterisco. Sem isto os cards ficavam
     // presos numa fila vertical que se sobrepunha ao resto do mapa.

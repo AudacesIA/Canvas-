@@ -78,6 +78,15 @@
         body: data,
         headers: rev === null || rev === undefined ? {} : { 'If-Match': String(rev) },
       }),
+
+    criarCenario: (clientId, canvasId, { nome, premissa, postura, oportunidadeId }) =>
+      request('POST', `/api/clients/${clientId}/canvases/${canvasId}/cenarios`, {
+        body: { nome, premissa, postura, oportunidadeId },
+      }),
+    listarCenarios: (clientId, canvasId) =>
+      request('GET', `/api/clients/${clientId}/canvases/${canvasId}/cenarios`),
+    compararCenario: (clientId, canvasId) =>
+      request('GET', `/api/clients/${clientId}/canvases/${canvasId}/comparar`),
   };
 
   // --- estado da sessão de escrita ---------------------------------------

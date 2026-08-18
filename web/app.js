@@ -2261,6 +2261,9 @@ function applyCanvasState(data, opts = {}) {
   window.AudasysBreakpoints?.renderTodos?.();
   window.AudasysOportunidades?.renderTodos?.();
 
+  window.currentCanvasDerivadoDe = data.derivadoDe || null;
+  updateCenarioHeaderUI(data);
+
   updateViewport();
   updateConnections();
   applyAreaFilter();
@@ -2271,12 +2274,63 @@ function applyCanvasState(data, opts = {}) {
   return { applied: true };
 }
 
+function updateCenarioHeaderUI(data) {
+  const widget = document.getElementById('header-cenario-widget');
+  const btnListar = document.getElementById('btn-listar-cenarios-topo');
+  const badgeCount = document.getElementById('cenarios-count-badge');
+  if (!widget) return;
+
+  if (data?.derivadoDe) {
+    widget.style.display = 'flex';
+    if (btnListar) btnListar.style.display = 'none';
+
+    const posturaEl = document.getElementById('header-cenario-postura');
+    const premissaEl = document.getElementById('header-cenario-premissa');
+    if (posturaEl) posturaEl.textContent = (data.derivadoDe.postura || 'Realista').toUpperCase();
+    if (premissaEl) premissaEl.textContent = data.derivadoDe.premissa || 'Cenário Simulado';
+  } else {
+    widget.style.display = 'none';
+    if (btnListar) {
+      btnListar.style.display = '';
+      if (activeClientId && activeCanvasId) {
+        Audasys.api.listarCenarios(activeClientId, activeCanvasId).then(({ cenarios }) => {
+          if (badgeCount) {
+            badgeCount.textContent = cenarios.length;
+            badgeCount.style.display = cenarios.length > 0 ? 'inline-block' : 'none';
+          }
+        }).catch(() => {});
+      }
+    }
+  }
+}
+
 document.getElementById('btn-add-note').addEventListener('click', () => {
   const rect = viewport.getBoundingClientRect();
   const x = (rect.width / 2 - panOffset.x) / zoom - 100;
   const y = (rect.height / 2 - panOffset.y) / zoom - 60;
   createNote(x, y);
 });
+
+// Cenários no Topo
+document.getElementById('btn-comparar-cenario-topo')?.addEventListener('click', () => {
+  if (activeClientId && activeCanvasId && window.AudasysComparador) {
+    window.AudasysComparador.abrirModalComparador(activeClientId, activeCanvasId);
+  }
+});
+
+document.getElementById('btn-voltar-processo-base')?.addEventListener('click', () => {
+  if (window.currentCanvasDerivadoDe?.canvasId) {
+    openCanvas(window.currentCanvasDerivadoDe.canvasId);
+  }
+});
+
+document.getElementById('btn-listar-cenarios-topo')?.addEventListener('click', () => {
+  if (activeClientId && activeCanvasId && window.AudasysComparador) {
+    window.AudasysComparador.abrirListaCenarios(activeClientId, activeCanvasId);
+  }
+});
+
+window.openCanvas = openCanvas;
 
 // Global actions binding
 // O salvamento é automático; o botão força a descarga imediata da fila.

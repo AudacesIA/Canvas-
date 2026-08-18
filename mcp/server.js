@@ -460,15 +460,59 @@ server.registerTool(
       postura: z.enum(['realista', 'otimista', 'pessimista', 'exploratorio']).optional()
         .describe('exploratorio = o cenário distante que serve para dar tangibilidade '
           + '(o braço robótico), mesmo sabendo que não é para agora'),
+      oportunidadeId: z.string().optional().describe('Id da oportunidade de receita de onde este cenário nasceu (ex: op_1)'),
       nome: z.string().optional(),
     },
   },
-  guard(async ({ clientId, canvasId, premissa, postura, nome }) => {
-    const { canvas } = await client.criarCenario(clientId, canvasId, { premissa, postura, nome });
-    return text(`Cenário criado: ${canvas.id}  "${canvas.name}"\n`
+  guard(async ({ clientId, canvasId, premissa, postura, oportunidadeId, nome }) => {
+    const { canvas } = await client.criarCenario(clientId, canvasId, { premissa, postura, oportunidadeId, nome });
+    const opRef = oportunidadeId ? ` (vinculado à oportunidade ${oportunidadeId})` : '';
+    return text(`Cenário criado: ${canvas.id}  "${canvas.name}"${opRef}\n`
       + `Premissa: ${canvas.derivadoDe.premissa}  [${canvas.derivadoDe.postura}]\n`
       + `Copiou ${canvas.nodes.length} passos e ${canvas.connections.length} passagens do processo real.\n\n`
       + 'Agora proponha as alterações NESTE canvasId, e depois chame comparar_cenario.');
+  }),
+);
+
+server.registerTool(
+  'simular_cenario',
+  {
+    title: 'Simular cenário operacional completo',
+    description:
+      'Cria um cenário "e se", aplica imediatamente um lote de alterações propostas e devolve o comparativo '
+      + 'estrutural contra o processo real. Use para responder rápido a perguntas do tipo '
+      + '"como ficaria o processo se terceirizássemos o frete Sul?".',
+    inputSchema: {
+      clientId: z.string(),
+      canvasId: z.string().describe('Id do canvas do processo REAL'),
+      premissa: z.string().describe('Premissa do cenário'),
+      postura: z.enum(['realista', 'otimista', 'pessimista', 'exploratorio']).optional(),
+      oportunidadeId: z.string().optional(),
+      nome: z.string().optional(),
+      ops: z.array(opShape).optional().describe('Operações estruturais a aplicar no cenário'),
+      rationale: z.string().optional().describe('Por que estas alterações'),
+    },
+  },
+  guard(async ({ clientId, canvasId, premissa, postura = 'realista', oportunidadeId, nome, ops = [], rationale = '' }) => {
+    const { canvas: cenario } = await client.criarCenario(clientId, canvasId, { premissa, postura, oportunidadeId, nome });
+    let changesetInfo = '';
+    if (ops.length > 0) {
+      const prop = await client.propose(clientId, cenario.id, {
+        title: `Simulação: ${premissa}`,
+        rationale: rationale || `Aplicação automática de simulação para o cenário "${premissa}"`,
+        ops,
+        replace: true,
+      });
+      changesetInfo = `\nProposta de alteração criada (${prop.changeset.id}) com ${ops.length} operações.`;
+    }
+    const comp = await client.comparar(clientId, cenario.id);
+    return text(
+      `🎯 Simulação criada com sucesso!\n`
+      + `Cenário: ${cenario.id} "${cenario.name}" [${cenario.derivadoDe.postura}]\n`
+      + `Premissa: ${cenario.derivadoDe.premissa}${changesetInfo}\n\n`
+      + `--- IMPACTO ESTRUTURAL (Comparação As-Is vs To-Be) ---\n`
+      + comp.texto
+    );
   }),
 );
 

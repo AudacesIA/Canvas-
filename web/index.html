@@ -54,16 +54,29 @@
       <span id="breadcrumb-node-name"></span>
     </div>
 
+    <!-- Cenário Ativo Banner / Navigation -->
+    <div class="header-cenario-widget" id="header-cenario-widget" style="display:none;">
+      <div class="cenario-badge-tag" id="header-cenario-badge">
+        <i class="fa-solid fa-code-branch"></i>
+        <span id="header-cenario-postura">Realista</span>:
+        <span id="header-cenario-premissa" style="max-width:180px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">...</span>
+      </div>
+      <button id="btn-comparar-cenario-topo" class="header-btn highlight-btn" title="Comparar este cenário com o processo real"><i class="fa-solid fa-code-compare"></i> Comparar</button>
+      <button id="btn-voltar-processo-base" class="header-btn" title="Voltar ao processo real"><i class="fa-solid fa-arrow-left"></i> Processo Real</button>
+    </div>
+
     <button id="btn-back-home" class="header-btn back-home-btn" title="Voltar para o início" style="display:none;"><i class="fa-solid fa-arrow-left"></i> Início</button>
 
     <div class="header-actions" id="header-actions">
+      <button id="btn-listar-cenarios-topo" class="header-btn" title="Cenários e Simulações 'E Se' derivados"><i class="fa-solid fa-code-branch"></i> Cenários <span id="cenarios-count-badge" class="badge-pill" style="display:none;">0</span></button>
       <button id="btn-save" class="header-btn" title="Estado da gravação — o salvamento é automático"><i class="fa-solid fa-cloud-arrow-up"></i> Salvar</button>
       <button id="btn-export" class="header-btn" title="Exportar arquivo JSON"><i class="fa-solid fa-file-export"></i> Exportar</button>
       <button id="btn-add-note" class="header-btn" title="Adicionar anotação rápida (sticky note)"><i class="fa-solid fa-note-sticky"></i> Anotação</button>
-      <button id="btn-oportunidades" class="header-btn" title="Oportunidades de receita mapeadas no canvas"><i class="fa-solid fa-asterisk"></i> Oportunidades</button>
+      <button id="btn-oportunidades" class="header-btn" title="Hub de Oportunidades & Hipóteses"><i class="fa-solid fa-asterisk"></i> Oportunidades</button>
       <button id="btn-organizar" class="header-btn" title="Reposicionar os blocos em camadas, da esquerda para a direita"><i class="fa-solid fa-wand-magic"></i> Organizar</button>
+      <button id="btn-chat-toggle" class="header-btn highlight-btn" title="Copilot de Simulação & Análise IA"><i class="fa-solid fa-wand-magic-sparkles"></i> Copilot IA</button>
       <button id="btn-clear" class="header-btn danger-btn" title="Limpar todo o quadro"><i class="fa-solid fa-trash-can"></i> Limpar</button>
-      <button id="btn-audit" class="audit-btn"><span class="audit-btn-inner"><i class="fa-solid fa-wand-magic-sparkles"></i> Auditoria de IA</span></button>
+      <button id="btn-audit" class="audit-btn"><span class="audit-btn-inner"><i class="fa-solid fa-clipboard-check"></i> Auditoria</span></button>
     </div>
   </header>
 
@@ -502,6 +515,8 @@
   <script src="breakpoints.js"></script>
   <script src="markdown.js"></script>
   <script src="oportunidades.js"></script>
+  <script src="comparador.js"></script>
+  <script src="chat.js"></script>
   <script src="agent.js"></script>
 </body>
 </html>

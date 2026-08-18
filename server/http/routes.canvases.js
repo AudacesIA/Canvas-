@@ -98,8 +98,8 @@ export function registerCanvasRoutes(router, { canvasService }) {
 
   // --- cenário "e se": fork do processo real, com vínculo de volta ---
   router.post('/api/clients/:clientId/canvases/:canvasId/cenarios', async (req, res, { clientId, canvasId }) => {
-    const { nome, premissa, postura } = await readJsonBody(req);
-    sendJson(res, 201, { canvas: await canvasService.criarCenario(clientId, canvasId, { nome, premissa, postura }) });
+    const { nome, premissa, postura, oportunidadeId } = await readJsonBody(req);
+    sendJson(res, 201, { canvas: await canvasService.criarCenario(clientId, canvasId, { nome, premissa, postura, oportunidadeId }) });
   });
 
   router.get('/api/clients/:clientId/canvases/:canvasId/cenarios', async (req, res, { clientId, canvasId }) => {
