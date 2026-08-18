@@ -96,6 +96,30 @@ export function registerCanvasRoutes(router, { canvasService }) {
     sendJson(res, 200, await canvasService.deleteCanvas(clientId, canvasId));
   });
 
+  // --- cenário "e se": fork do processo real, com vínculo de volta ---
+  router.post('/api/clients/:clientId/canvases/:canvasId/cenarios', async (req, res, { clientId, canvasId }) => {
+    const { nome, premissa, postura } = await readJsonBody(req);
+    sendJson(res, 201, { canvas: await canvasService.criarCenario(clientId, canvasId, { nome, premissa, postura }) });
+  });
+
+  router.get('/api/clients/:clientId/canvases/:canvasId/cenarios', async (req, res, { clientId, canvasId }) => {
+    sendJson(res, 200, { cenarios: await canvasService.listarCenarios(clientId, canvasId) });
+  });
+
+  router.get('/api/clients/:clientId/canvases/:canvasId/comparar', async (req, res, { clientId, canvasId }, url) => {
+    const { compararCanvas, compararEmTexto } = await import('../core/comparador.js');
+    const cenario = await canvasService.getCanvas(clientId, canvasId);
+    if (!cenario.derivadoDe) {
+      throw httpError(422, `"${cenario.name}" não é um cenário — não há do que comparar. `
+        + 'Compare a partir do canvas derivado, não do processo real.');
+    }
+    const base = await canvasService.getCanvas(clientId, cenario.derivadoDe.canvasId);
+    sendJson(res, 200, {
+      comparacao: compararCanvas(base, cenario),
+      texto: compararEmTexto(base, cenario),
+    });
+  });
+
   router.post('/api/clients/:clientId/canvases/:canvasId/duplicate', async (req, res, { clientId, canvasId }) => {
     sendJson(res, 201, { canvas: await canvasService.duplicateCanvas(clientId, canvasId) });
   });

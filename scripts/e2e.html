@@ -683,6 +683,60 @@ async function until(fn, ms = 6000, step = 100) {
     check('outline mostra o gargalo da passagem (não nasce cego)',
       outG.includes('endereço chega errado e volta'));
 
+    // ══ Cenário "e se" ════════════════════════════════════════════════════
+    let semPremissa = false;
+    try {
+      await api('POST', `/api/clients/${clientId}/canvases/${canvas.id}/cenarios`, { nome: 'x' });
+    } catch { semPremissa = true; }
+    check('cenário sem premissa é recusado', semPremissa);
+
+    const { canvas: cen } = await api('POST', `/api/clients/${clientId}/canvases/${canvas.id}/cenarios`,
+      { premissa: 'frota própria MG→BA, Sul terceirizado', postura: 'realista' });
+    check('cenário nasce com vínculo ao processo real',
+      cen.derivadoDe?.canvasId === canvas.id, cen.derivadoDe?.premissa);
+    check('cenário copia o processo inteiro',
+      cen.nodes.length === (await api('GET', `/api/clients/${clientId}/canvases/${canvas.id}`)).canvas.nodes.length);
+
+    let cenarioDeCenario = false;
+    try {
+      await api('POST', `/api/clients/${clientId}/canvases/${cen.id}/cenarios`, { premissa: 'fork do fork' });
+    } catch { cenarioDeCenario = true; }
+    check('cenário de cenário é recusado (perde a referência do real)', cenarioDeCenario);
+
+    const { cenarios } = await api('GET', `/api/clients/${clientId}/canvases/${canvas.id}/cenarios`);
+    check('cenário aparece na lista do processo real', cenarios.length === 1);
+
+    // Remove um passo no cenário e confere que a comparação enxerga.
+    const cvCen = (await api('GET', `/api/clients/${clientId}/canvases/${cen.id}`)).canvas;
+    const vitima = cvCen.nodes[cvCen.nodes.length - 1];
+    await api('PUT', `/api/clients/${clientId}/canvases/${cen.id}`, {
+      nodes: cvCen.nodes.filter(n => n.id !== vitima.id),
+      connections: cvCen.connections.filter(c => c.from !== vitima.id && c.to !== vitima.id),
+    });
+
+    const comp = await api('GET', `/api/clients/${clientId}/canvases/${cen.id}/comparar`);
+    check('comparação conta o passo que sumiu',
+      comp.comparacao.estrutura.passos.delta === -1, `delta=${comp.comparacao.estrutura.passos.delta}`);
+    check('comparação nomeia o passo removido',
+      comp.comparacao.passos.removidos.includes(vitima.name), comp.comparacao.passos.removidos.join(','));
+    check('comparação traz a premissa junto', comp.comparacao.premissa.includes('Sul terceirizado'));
+
+    /**
+     * A checagem que protege o método: sem número apurado dos dois lados, o
+     * comparador diz "não comparável" em vez de inventar. Zero conta como não
+     * apurado — no canvas real da Berenice os 16 nós têm cycleTimeMin: 0, e
+     * tratar isso como medição produziria "0 → 0" com cara de comparação.
+     */
+    check('comparador NÃO inventa métrica quando ninguém apurou',
+      comp.comparacao.metricas.costPerRun.comparavel === false
+      && comp.texto.includes('não comparável'),
+      comp.comparacao.metricas.costPerRun.motivo);
+
+    let compararRaiz = false;
+    try { await api('GET', `/api/clients/${clientId}/canvases/${canvas.id}/comparar`); }
+    catch { compararRaiz = true; }
+    check('comparar um canvas que não é cenário é recusado', compararRaiz);
+
   } catch (err) {
     check('execução sem exceção', false, err.message + ' | ' + (err.stack || '').split('\n')[1]);
   }

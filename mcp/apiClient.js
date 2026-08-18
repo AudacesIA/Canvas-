@@ -37,6 +37,12 @@ export const client = {
   // só para o que o outline não carrega — hoje, a camada de medição.
   canvas: (clientId, canvasId) =>
     request('GET', `/api/clients/${clientId}/canvases/${canvasId}`),
+  criarCenario: (clientId, canvasId, body) =>
+    request('POST', `/api/clients/${clientId}/canvases/${canvasId}/cenarios`, body),
+  cenarios: (clientId, canvasId) =>
+    request('GET', `/api/clients/${clientId}/canvases/${canvasId}/cenarios`),
+  comparar: (clientId, canvasId) =>
+    request('GET', `/api/clients/${clientId}/canvases/${canvasId}/comparar`),
   propose: (clientId, canvasId, body) =>
     request('POST', `/api/clients/${clientId}/canvases/${canvasId}/changesets`, body),
   listChangesets: (clientId, canvasId) =>

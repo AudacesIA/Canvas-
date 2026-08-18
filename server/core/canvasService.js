@@ -79,6 +79,9 @@ export class CanvasService {
         rev: doc.rev ?? 0,
         nodeCount: Array.isArray(doc.nodes) ? doc.nodes.length : 0,
         edgeCount: Array.isArray(doc.connections) ? doc.connections.length : 0,
+        // Sem isto na projeção, a home e o agente não conseguem distinguir o
+        // processo real do cenário — e distinguir é o ponto do recurso.
+        derivadoDe: doc.derivadoDe ?? null,
       }))
       .sort((a, b) => String(b.lastModified).localeCompare(String(a.lastModified)));
   }
@@ -122,6 +125,42 @@ export class CanvasService {
     });
   }
 
+  /**
+   * Cenário "e se": um fork do processo real, com vínculo de volta.
+   *
+   * É duplicação, mas não é cópia solta. A diferença entre os dois está no
+   * `derivadoDe`, e ela é o que impede o pior risco deste recurso: um cenário
+   * aceito por engano virar "o processo que a empresa tem".
+   *
+   * Cenário de cenário é recusado. Um fork de fork perde a referência ao que a
+   * operação realmente faz, e a comparação deixa de significar alguma coisa.
+   */
+  async criarCenario(clientId, canvasId, { nome, premissa, postura = 'realista' }) {
+    const base = await this.getCanvas(clientId, canvasId);
+    if (base.derivadoDe) {
+      throw httpError(409,
+        `"${base.name}" já é um cenário de outro canvas. Crie o novo cenário a partir do `
+        + 'processo real, senão a comparação perde a referência do que a operação faz hoje.');
+    }
+    if (!premissa || !String(premissa).trim()) {
+      throw httpError(422,
+        'Cenário exige "premissa": a frase que o originou. Sem ela, daqui a seis semanas '
+        + 'ninguém consegue contestar o desenho — nem lembrar por que ele existe.');
+    }
+    return this.createCanvas(clientId, {
+      name: nome || `${base.name} — ${premissa}`.slice(0, 80),
+      folderId: base.folderId,
+      seed: strip(base),
+      derivadoDe: { canvasId: base.id, premissa: String(premissa).trim(), postura },
+    });
+  }
+
+  /** Cenários derivados de um canvas. */
+  async listarCenarios(clientId, canvasId) {
+    const todos = await this.listCanvases(clientId);
+    return todos.filter((c) => c.derivadoDe?.canvasId === canvasId);
+  }
+
   async moveCanvasToClient(fromClientId, canvasId, toClientId) {
     const source = await this.getCanvas(fromClientId, canvasId);
     await this.ensureClient(toClientId);
@@ -143,11 +182,11 @@ export class CanvasService {
     return doc;
   }
 
-  async createCanvas(clientId, { name, folderId = null, seed = null }) {
+  async createCanvas(clientId, { name, folderId = null, seed = null, derivadoDe = null }) {
     await this.ensureClient(clientId);
     const id = newCanvasId();
     const doc = seed
-      ? hydrateCanvas({ ...seed, id, clientId, name, folderId, rev: 0 }, { id, clientId })
+      ? hydrateCanvas({ ...seed, id, clientId, name, folderId, rev: 0, derivadoDe }, { id, clientId })
       : emptyCanvas({ id, clientId, name, folderId });
     await this.storage.writeCanvas(clientId, id, strip(doc));
     return doc;

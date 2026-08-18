@@ -440,6 +440,78 @@ server.registerTool(
 );
 
 server.registerTool(
+  'criar_cenario',
+  {
+    title: 'Desenhar um "e se"',
+    description:
+      'Cria um CENÁRIO: uma cópia do processo real, ligada a ele, onde você desenha como a '
+      + 'operação ficaria sob uma premissa diferente. É a parte da consultoria que mostra ao dono '
+      + 'o processo alternativo em vez de descrevê-lo.\n'
+      + 'Depois de criar, use propose_changeset NO CANVAS DO CENÁRIO para aplicar as mudanças '
+      + '(remover o passo que some, ligar a passagem nova, mapear a oportunidade de receita).\n'
+      + 'A postura NÃO é um multiplicador: "pessimista" não significa reduzir 8%, significa uma '
+      + 'premissa mais dura escrita por extenso — algo que o dono possa contestar na reunião.',
+    inputSchema: {
+      clientId: z.string(),
+      canvasId: z.string().describe('O canvas do processo REAL. Cenário de cenário é recusado.'),
+      premissa: z.string().describe(
+        'A frase que origina o cenário: "frota própria MG→BA e Sul terceirizado". '
+        + 'Obrigatória — sem ela ninguém contesta o desenho seis semanas depois.'),
+      postura: z.enum(['realista', 'otimista', 'pessimista', 'exploratorio']).optional()
+        .describe('exploratorio = o cenário distante que serve para dar tangibilidade '
+          + '(o braço robótico), mesmo sabendo que não é para agora'),
+      nome: z.string().optional(),
+    },
+  },
+  guard(async ({ clientId, canvasId, premissa, postura, nome }) => {
+    const { canvas } = await client.criarCenario(clientId, canvasId, { premissa, postura, nome });
+    return text(`Cenário criado: ${canvas.id}  "${canvas.name}"\n`
+      + `Premissa: ${canvas.derivadoDe.premissa}  [${canvas.derivadoDe.postura}]\n`
+      + `Copiou ${canvas.nodes.length} passos e ${canvas.connections.length} passagens do processo real.\n\n`
+      + 'Agora proponha as alterações NESTE canvasId, e depois chame comparar_cenario.');
+  }),
+);
+
+server.registerTool(
+  'get_cenarios',
+  {
+    title: 'Cenários de um processo',
+    description:
+      'Lista os cenários "e se" derivados de um canvas, com a premissa de cada um. '
+      + 'Chame antes de criar: repropor um cenário que já foi desenhado queima tempo de reunião.',
+    inputSchema: { clientId: z.string(), canvasId: z.string() },
+  },
+  guard(async ({ clientId, canvasId }) => {
+    const { cenarios } = await client.cenarios(clientId, canvasId);
+    if (!cenarios.length) {
+      return text('Nenhum cenário desenhado a partir deste processo ainda.');
+    }
+    return text(cenarios.map((c) =>
+      `${c.id}  "${c.name}"  [${c.derivadoDe.postura}]  ${c.nodeCount} passos\n`
+      + `   premissa: ${c.derivadoDe.premissa}`).join('\n\n'));
+  }),
+);
+
+server.registerTool(
+  'comparar_cenario',
+  {
+    title: 'O que muda entre o processo real e o cenário',
+    description:
+      'Compara um cenário com o processo de que ele deriva: passos que somem e que nascem, '
+      + 'passagens de bastão, gargalos por categoria Lean e malhas de medição abertas.\n'
+      + '⚠️ A comparação conta ESTRUTURA, não dinheiro. Número em reais ou em minutos só aparece '
+      + 'quando os DOIS lados têm o número apurado; onde disser "não comparável", ninguém mediu. '
+      + 'NÃO preencha essa lacuna com estimativa: a ferramenta existe para separar o que a '
+      + 'consultoria apurou do que ela supôs, e um percentual inventado destrói exatamente isso.',
+    inputSchema: {
+      clientId: z.string(),
+      canvasId: z.string().describe('O canvas do CENÁRIO (o derivado), não o do processo real'),
+    },
+  },
+  guard(async ({ clientId, canvasId }) => text((await client.comparar(clientId, canvasId)).texto)),
+);
+
+server.registerTool(
   'validate_canvas',
   {
     title: 'Conferir o mapa',

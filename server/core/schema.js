@@ -409,6 +409,34 @@ export function hydrateLane(raw, index = 0) {
   };
 }
 
+export const POSTURAS = ['realista', 'otimista', 'pessimista', 'exploratorio'];
+
+/**
+ * Vínculo de cenário: este canvas é uma versão "e se" de outro.
+ *
+ * A consultoria mapeia o processo real e depois pergunta "e se a frota fosse
+ * dividida?". O cenário precisa ser um canvas de verdade — desenhado, com os nós
+ * e as passagens visíveis — mas não pode ser confundido com o processo que a
+ * empresa tem hoje. O vínculo é o que separa os dois.
+ *
+ * `premissa` é obrigatória em espírito: um cenário sem a frase que o originou é
+ * um mapa órfão que ninguém consegue contestar seis semanas depois.
+ *
+ * `postura` NÃO é um multiplicador. "Pessimista" não significa −8%; significa
+ * uma premissa mais dura escrita por extenso — "a transportadora do Sul não
+ * aceita o volume mínimo". É a diferença entre um cenário que o dono contesta na
+ * reunião e um número que ele engole sem entender.
+ */
+export function hydrateDerivadoDe(raw) {
+  if (!raw || typeof raw !== 'object' || !raw.canvasId) return null;
+  return {
+    canvasId: String(raw.canvasId),
+    premissa: String(raw.premissa ?? ''),
+    postura: oneOf(raw.postura, POSTURAS, 'realista'),
+    criadoEm: raw.criadoEm ?? new Date().toISOString(),
+  };
+}
+
 export const CADENCIAS = ['continua', 'diaria', 'semanal', 'mensal', 'eventual'];
 
 /**
@@ -492,6 +520,8 @@ export function hydrateCanvas(raw, { id, clientId } = {}) {
     clientId: clientId ?? doc.clientId ?? null,
     name: doc.name ?? 'Sem nome',
     folderId: doc.folderId ?? null,
+    // Cenário "e se": null num canvas de processo real.
+    derivadoDe: hydrateDerivadoDe(doc.derivadoDe),
     createdAt: doc.createdAt ?? now,
     lastModified: doc.lastModified ?? now,
     rev: Number.isInteger(doc.rev) ? doc.rev : 0,
