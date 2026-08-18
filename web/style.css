@@ -2798,17 +2798,25 @@ input.ev-meio, textarea.ev-meio, select.ev-meio { color: #c2c9d6; }
 
 .op-layer { position: absolute; inset: 0; pointer-events: none; z-index: 4; }
 
+/* O PONTO ZERO é o centro do glifo, e nada mais.
+   Antes o elemento envolvia o asterisco E o rótulo, e o translate(-50%,-50%)
+   centralizava o conjunto — o ponto de ancoragem caía ENTRE os dois, e as setas
+   partiam de um lugar que não existe visualmente. Agora o contador é absoluto e
+   não entra na conta: o centro da caixa é o centro do asterisco. */
 .op-asterisco {
   position: absolute;
-  transform: translate(-50%, -50%);
+  width: 22px;
+  height: 22px;
+  margin: -11px 0 0 -11px;   /* centra no ponto, sem transform que o rótulo herde */
   pointer-events: auto;
   cursor: pointer;
   text-align: center;
-  line-height: 1;
+  line-height: 22px;
   user-select: none;
 }
 .op-glifo {
   display: block;
+  line-height: 22px;
   font-size: 19px;
   color: #10b981;
   text-shadow: 0 0 10px rgba(16, 185, 129, 0.5);
@@ -2819,8 +2827,12 @@ input.ev-meio, textarea.ev-meio, select.ev-meio { color: #c2c9d6; }
 
 /* O contador só existe para dizer que há coisa escondida ali dentro. */
 .op-contador {
-  display: block;
-  margin-top: 3px;
+  /* Fora do fluxo: se entrasse, deslocaria o centro do asterisco de novo. */
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  margin-top: 2px;
   white-space: nowrap;
   font-size: 9.5px;
   color: #6ee7b7;

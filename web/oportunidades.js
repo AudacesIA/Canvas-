@@ -142,8 +142,15 @@
     const linha = document.createElementNS('http://www.w3.org/2000/svg', 'path');
     linha.setAttribute('class', 'op-seta');
     linha.setAttribute('data-aresta', arestaId);
-    const dx = Math.max(24, (para.x - de.x) * 0.5);
-    linha.setAttribute('d', `M ${de.x + 8} ${de.y + 6} C ${de.x + dx} ${de.y + 6}, ${para.x - dx} ${para.y + 20}, ${para.x - 4} ${para.y + 20}`);
+
+    // P0 é o CENTRO DO ASTERISCO, sem deslocamento. Todas as setas nascem no
+    // mesmo ponto — é isso que faz o feixe ler como uma origem só em vez de
+    // três linhas soltas passando perto.
+    const alvo = { x: para.x - 4, y: para.y + 20 };
+    const dx = Math.max(28, Math.abs(alvo.x - de.x) * 0.45);
+    const sentido = alvo.x >= de.x ? 1 : -1;
+    linha.setAttribute('d',
+      `M ${de.x} ${de.y} C ${de.x + dx * sentido} ${de.y}, ${alvo.x - dx * sentido} ${alvo.y}, ${alvo.x} ${alvo.y}`);
     document.getElementById('connections-svg').appendChild(linha);
   }
 
