@@ -87,6 +87,10 @@
       request('GET', `/api/clients/${clientId}/canvases/${canvasId}/cenarios`),
     compararCenario: (clientId, canvasId) =>
       request('GET', `/api/clients/${clientId}/canvases/${canvasId}/comparar`),
+    getMarkdown: (clientId, canvasId) =>
+      request('GET', `/api/clients/${clientId}/canvases/${canvasId}/markdown`),
+    renameCanvas: (clientId, canvasId, name) =>
+      request('PATCH', `/api/clients/${clientId}/canvases/${canvasId}`, { body: { name } }),
   };
 
   // --- estado da sessão de escrita ---------------------------------------

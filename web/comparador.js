@@ -1,5 +1,5 @@
 /**
- * Modal de Comparação Visual e Estrutural (As-Is vs To-Be).
+ * Modal de Comparação Executiva Baseado em Markdown & Estrutura (As-Is vs To-Be).
  *
  * Apresentação executiva para a Etapa 3 da consultoria Audaces.
  */
@@ -38,26 +38,36 @@
     overlay.id = 'comparador-modal';
     overlay.className = 'esc-overlay modal-overlay';
     overlay.innerHTML = `
-      <div class="modal-content" style="max-width: 780px; max-height: 90vh; display:flex; flex-direction:column;">
+      <div class="modal-content" style="max-width: 860px; max-height: 90vh; display:flex; flex-direction:column;">
         <button class="close-modal-btn" data-fechar-comp>&times;</button>
         <div class="modal-header" style="flex-shrink:0;">
-          <div class="modal-title-glow" style="color:var(--accent-glow); font-size:16px;">
-            <i class="fa-solid fa-code-compare"></i> COMPARAÇÃO EXECUTIVA: AS-IS vs CENÁRIO "E SE"
+          <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+            <div class="modal-title-glow" style="color:var(--accent-glow); font-size:16px;">
+              <i class="fa-solid fa-code-compare"></i> COMPARAÇÃO EXECUTIVA (MARKDOWN & ESTRUTURA)
+            </div>
+            <div id="comp-selo-recomendacao"></div>
           </div>
-          <p class="modal-subtitle" id="comp-subtitulo">Carregando comparativo estrutural...</p>
+          <p class="modal-subtitle" id="comp-subtitulo" style="margin-top:6px;">Carregando análise comparativa de processos...</p>
+
+          <!-- Abas de Navegação -->
+          <div class="comp-nav-tabs" style="display:flex; gap:8px; margin-top:14px; border-bottom:1px solid rgba(255,255,255,0.08); padding-bottom:2px;">
+            <button class="comp-tab-btn active" data-tab="pros-cons"><i class="fa-solid fa-trophy"></i> Parecer & Prós e Contras</button>
+            <button class="comp-tab-btn" data-tab="diff"><i class="fa-solid fa-arrows-split-up-and-left"></i> Diff Passo a Passo</button>
+            <button class="comp-tab-btn" data-tab="markdowns"><i class="fa-solid fa-file-lines"></i> Arquivos Markdown (.md)</button>
+          </div>
         </div>
         
-        <div class="modal-body" id="comp-body" style="flex:1; overflow-y:auto; padding: 12px 0;">
+        <div class="modal-body" id="comp-body" style="flex:1; overflow-y:auto; padding: 16px 0;">
           <div style="text-align:center; padding: 40px; color:#94a3b8;">
             <i class="fa-solid fa-spinner fa-spin fa-2x"></i>
-            <p style="margin-top:12px;">Calculando impacto estrutural do processo...</p>
+            <p style="margin-top:12px;">Sintetizando arquivos Markdown e calculando prós e contras...</p>
           </div>
         </div>
 
-        <div class="modal-footer" style="flex-shrink:0; display:flex; justify-content:space-between; align-items:center;">
-          <span style="font-size:11px; color:#64748b;">* Comparação baseada em dados desenhados e apurados honestamente.</span>
+        <div class="modal-footer" style="flex-shrink:0; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+          <span style="font-size:11px; color:#64748b;">* Análise comparativa baseada na fonte da verdade dos arquivos Markdown.</span>
           <div style="display:flex; gap:10px;">
-            <button class="header-btn" id="btn-copiar-relatorio-comp"><i class="fa-solid fa-copy"></i> Copiar Relatório</button>
+            <button class="header-btn highlight-btn" id="btn-copiar-relatorio-comp"><i class="fa-solid fa-copy"></i> Copiar Dossiê Executivo (.md)</button>
             <button class="header-btn" data-fechar-comp>Fechar</button>
           </div>
         </div>
@@ -72,51 +82,24 @@
     });
 
     try {
-      const { comparacao, texto } = await Audasys.api.compararCenario(effClientId, effCenarioId);
+      const data = await Audasys.api.compararCenario(effClientId, effCenarioId);
+      const { comparacao, texto, analiseMarkdown } = data;
       const est = comparacao.estrutura;
       const postura = POSTURA_LABELS[comparacao.postura || 'realista'] || POSTURA_LABELS.realista;
+      const analise = analiseMarkdown || {};
 
+      // Subtítulo e Selo de Recomendação
       overlay.querySelector('#comp-subtitulo').innerHTML = `
         Premissa: <strong>"${escapeHtml(comparacao.premissa || 'Sem premissa')}"</strong> 
         <span class="op-postura-badge" style="color:${postura.cor};background:${postura.bg};margin-left:8px;"><i class="fa-solid ${postura.icon}"></i> ${postura.label}</span>`;
 
-      let diffPassosHtml = '';
-      if (comparacao.passos.removidos.length || comparacao.passos.novos.length) {
-        diffPassosHtml = `
-          <div class="comp-section-title"><i class="fa-solid fa-arrows-split-up-and-left"></i> Modificações de Etapas</div>
-          <table class="comp-diff-table">
-            <thead>
-              <tr><th>Tipo</th><th>Nome do Passo</th></tr>
-            </thead>
-            <tbody>
-              ${comparacao.passos.removidos.map(p => `<tr><td><span class="comp-tag-del">− REMOVIDO</span></td><td>${escapeHtml(p)}</td></tr>`).join('')}
-              ${comparacao.passos.novos.map(p => `<tr><td><span class="comp-tag-add">+ ADICIONADO</span></td><td>${escapeHtml(p)}</td></tr>`).join('')}
-            </tbody>
-          </table>`;
-      }
+      overlay.querySelector('#comp-selo-recomendacao').innerHTML = `
+        <span style="font-size:11px; font-weight:700; color:#10b981; background:rgba(16,185,129,0.15); border:1px solid rgba(16,185,129,0.3); padding:4px 10px; border-radius:6px; text-transform:uppercase;">
+          <i class="fa-solid fa-check-double"></i> ${escapeHtml(analise.seloRecomendacao || 'QUICK WIN')}
+        </span>`;
 
-      let leanHtml = '';
-      const leanEntries = Object.entries(comparacao.porCategoriaLean || {});
-      if (leanEntries.length) {
-        leanHtml = `
-          <div class="comp-section-title"><i class="fa-solid fa-recycle"></i> Desperdícios Lean por Categoria</div>
-          <table class="comp-diff-table">
-            <thead>
-              <tr><th>Categoria</th><th>Processo Atual</th><th>Cenário Simulado</th><th>Impacto</th></tr>
-            </thead>
-            <tbody>
-              ${leanEntries.map(([cat, v]) => `
-                <tr>
-                  <td><strong>${escapeHtml(cat)}</strong></td>
-                  <td>${v.antes}</td>
-                  <td>${v.depois}</td>
-                  <td>${deltaFormat(v.delta)}</td>
-                </tr>`).join('')}
-            </tbody>
-          </table>`;
-      }
-
-      overlay.querySelector('#comp-body').innerHTML = `
+      // ── ABA 1: Prós & Contras ──────────────────────────────────────────────
+      const renderAbaProsCons = () => `
         <div class="comp-grid-summary">
           <div class="comp-metric-card neutral">
             <div class="val">${est.passos.base} → ${est.passos.cenario} (${deltaFormat(est.passos.delta)})</div>
@@ -124,7 +107,7 @@
           </div>
           <div class="comp-metric-card ${est.handoffs.delta < 0 ? 'good' : est.handoffs.delta > 0 ? 'warning' : 'neutral'}">
             <div class="val">${est.handoffs.base} → ${est.handoffs.cenario} (${deltaFormat(est.handoffs.delta)})</div>
-            <div class="lbl">Passagens de Bastão (Handoffs)</div>
+            <div class="lbl">Passagens de Bastão</div>
           </div>
           <div class="comp-metric-card ${est.gargalos.delta < 0 ? 'good' : est.gargalos.delta > 0 ? 'warning' : 'neutral'}">
             <div class="val">${est.gargalos.base} → ${est.gargalos.cenario} (${deltaFormat(est.gargalos.delta)})</div>
@@ -132,23 +115,144 @@
           </div>
           <div class="comp-metric-card ${est.malhasAbertas.delta < 0 ? 'good' : 'neutral'}">
             <div class="val">${est.malhasAbertas.base} → ${est.malhasAbertas.cenario} (${deltaFormat(est.malhasAbertas.delta)})</div>
-            <div class="lbl">Malhas Abertas (Sem Dono)</div>
+            <div class="lbl">Sem Dono / Soltos</div>
           </div>
         </div>
 
-        ${diffPassosHtml}
-        ${leanHtml}
+        <!-- Parecer Executivo -->
+        <div style="margin: 16px 0; padding: 14px 16px; background: rgba(59,130,246,0.08); border: 1px solid rgba(59,130,246,0.25); border-radius: 10px;">
+          <div style="font-weight:700; color:#93c5fd; margin-bottom:4px; font-size:13px;"><i class="fa-solid fa-lightbulb"></i> Parecer Estratégico da Consultoria:</div>
+          <div style="font-size:13px; color:#e2e8f0; line-height:1.5;">${escapeHtml(analise.parecerConsultoria || 'Cenário viável com ganhos estruturais imediatos.')}</div>
+        </div>
+
+        <!-- Grid Prós vs Contras -->
+        <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 14px; margin-top: 16px;">
+          <!-- Coluna Verde: Ganhos -->
+          <div style="background: rgba(16,185,129,0.04); border: 1px solid rgba(16,185,129,0.2); border-radius: 10px; padding: 14px;">
+            <div style="font-weight:700; color:#34d399; font-size:13px; margin-bottom:10px; display:flex; align-items:center; gap:6px;">
+              <i class="fa-solid fa-circle-check"></i> PONTOS POSITIVOS & GANHOS
+            </div>
+            ${(analise.pontosPositivos || []).map(p => `
+              <div style="margin-bottom:10px; padding-bottom:10px; border-bottom:1px solid rgba(255,255,255,0.05);">
+                <div style="font-weight:600; color:#f8fafc; font-size:12.5px;">• ${escapeHtml(p.titulo)}</div>
+                <div style="font-size:11.5px; color:#94a3b8; margin-top:2px; line-height:1.4;">${escapeHtml(p.detalhe)}</div>
+              </div>`).join('')}
+          </div>
+
+          <!-- Coluna Âmbar/Vermelha: Riscos -->
+          <div style="background: rgba(245,158,11,0.04); border: 1px solid rgba(245,158,11,0.2); border-radius: 10px; padding: 14px;">
+            <div style="font-weight:700; color:#fbbf24; font-size:13px; margin-bottom:10px; display:flex; align-items:center; gap:6px;">
+              <i class="fa-solid fa-triangle-exclamation"></i> RISCOS & TRADE-OFFS
+            </div>
+            ${(analise.pontosNegativos || []).map(p => `
+              <div style="margin-bottom:10px; padding-bottom:10px; border-bottom:1px solid rgba(255,255,255,0.05);">
+                <div style="font-weight:600; color:#f8fafc; font-size:12.5px;">• ${escapeHtml(p.titulo)}</div>
+                <div style="font-size:11.5px; color:#94a3b8; margin-top:2px; line-height:1.4;">${escapeHtml(p.detalhe)}</div>
+              </div>`).join('')}
+          </div>
+        </div>
       `;
 
+      // ── ABA 2: Diff Passo a Passo ──────────────────────────────────────────
+      const renderAbaDiff = () => {
+        let diffPassosHtml = '<div style="color:#94a3b8; font-size:13px; padding:12px;">Nenhum passo adicionado ou removido. Apenas regras e atributos foram ajustados.</div>';
+        if (comparacao.passos.removidos.length || comparacao.passos.novos.length) {
+          diffPassosHtml = `
+            <table class="comp-diff-table" style="margin-top:10px;">
+              <thead>
+                <tr><th>Status</th><th>Nome da Etapa</th></tr>
+              </thead>
+              <tbody>
+                ${comparacao.passos.removidos.map(p => `<tr><td><span class="comp-tag-del">− REMOVIDO</span></td><td>${escapeHtml(p)}</td></tr>`).join('')}
+                ${comparacao.passos.novos.map(p => `<tr><td><span class="comp-tag-add">+ ADICIONADO</span></td><td>${escapeHtml(p)}</td></tr>`).join('')}
+              </tbody>
+            </table>`;
+        }
+
+        let leanHtml = '';
+        const leanEntries = Object.entries(comparacao.porCategoriaLean || {});
+        if (leanEntries.length) {
+          leanHtml = `
+            <div class="comp-section-title" style="margin-top:20px;"><i class="fa-solid fa-recycle"></i> Desperdícios Lean por Categoria</div>
+            <table class="comp-diff-table" style="margin-top:10px;">
+              <thead>
+                <tr><th>Categoria</th><th>Processo Atual</th><th>Cenário Simulado</th><th>Variação</th></tr>
+              </thead>
+              <tbody>
+                ${leanEntries.map(([cat, v]) => `
+                  <tr>
+                    <td><strong>${escapeHtml(cat)}</strong></td>
+                    <td>${v.antes}</td>
+                    <td>${v.depois}</td>
+                    <td>${deltaFormat(v.delta)}</td>
+                  </tr>`).join('')}
+              </tbody>
+            </table>`;
+        }
+
+        return `
+          <div class="comp-section-title"><i class="fa-solid fa-arrows-split-up-and-left"></i> Modificações Estruturais de Etapas</div>
+          ${diffPassosHtml}
+          ${leanHtml}
+        `;
+      };
+
+      // ── ABA 3: Documentos Markdown ────────────────────────────────────────
+      const renderAbaMarkdowns = () => `
+        <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: 14px;">
+          <div>
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+              <span style="font-weight:700; font-size:12.5px; color:#cbd5e1;"><i class="fa-solid fa-file-lines"></i> Processo Real (As-Is.md)</span>
+              <button class="arb-btn" id="btn-copiar-md-base" style="font-size:11px; padding:3px 8px;"><i class="fa-solid fa-copy"></i> Copiar</button>
+            </div>
+            <pre style="background:#090d16; border:1px solid rgba(255,255,255,0.08); border-radius:8px; padding:12px; font-size:11.5px; color:#94a3b8; max-height:360px; overflow-y:auto; white-space:pre-wrap;">${escapeHtml(analise.markdownBase || 'Markdown As-Is indisponível')}</pre>
+          </div>
+          <div>
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+              <span style="font-weight:700; font-size:12.5px; color:#60a5fa;"><i class="fa-solid fa-file-lines"></i> Cenário Simulado (To-Be.md)</span>
+              <button class="arb-btn" id="btn-copiar-md-cenario" style="font-size:11px; padding:3px 8px;"><i class="fa-solid fa-copy"></i> Copiar</button>
+            </div>
+            <pre style="background:#090d16; border:1px solid rgba(59,130,246,0.2); border-radius:8px; padding:12px; font-size:11.5px; color:#bfdbfe; max-height:360px; overflow-y:auto; white-space:pre-wrap;">${escapeHtml(analise.markdownCenario || 'Markdown To-Be indisponível')}</pre>
+          </div>
+        </div>
+      `;
+
+      // Controle de Abas
+      const bodyEl = overlay.querySelector('#comp-body');
+      bodyEl.innerHTML = renderAbaProsCons();
+
+      overlay.querySelectorAll('.comp-tab-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          overlay.querySelectorAll('.comp-tab-btn').forEach(b => b.classList.remove('active'));
+          btn.classList.add('active');
+          const tab = btn.dataset.tab;
+          if (tab === 'pros-cons') bodyEl.innerHTML = renderAbaProsCons();
+          else if (tab === 'diff') bodyEl.innerHTML = renderAbaDiff();
+          else if (tab === 'markdowns') {
+            bodyEl.innerHTML = renderAbaMarkdowns();
+            bodyEl.querySelector('#btn-copiar-md-base')?.addEventListener('click', () => {
+              navigator.clipboard.writeText(analise.markdownBase || '');
+              alert('Markdown do Processo Original copiado!');
+            });
+            bodyEl.querySelector('#btn-copiar-md-cenario')?.addEventListener('click', () => {
+              navigator.clipboard.writeText(analise.markdownCenario || '');
+              alert('Markdown do Cenário Simulado copiado!');
+            });
+          }
+        });
+      });
+
+      // Botão Copiar Relatório Executivo Geral
       overlay.querySelector('#btn-copiar-relatorio-comp').onclick = () => {
-        navigator.clipboard.writeText(texto);
-        alert('Relatório comparativo em texto copiado para a área de transferência!');
+        const fullReport = analise.relatorioExecutivo || texto;
+        navigator.clipboard.writeText(fullReport);
+        alert('Dossiê Executivo completo (.md) copiado com sucesso para a área de transferência!');
       };
     } catch (err) {
       overlay.querySelector('#comp-body').innerHTML = `
         <div style="padding: 24px; color:#f87171; text-align:center;">
           <i class="fa-solid fa-triangle-exclamation fa-2x"></i>
-          <p style="margin-top:12px;">Falha ao carregar comparativo: ${escapeHtml(err.message)}</p>
+          <p style="margin-top:12px;">Falha ao carregar comparativo de markdown: ${escapeHtml(err.message)}</p>
         </div>`;
     }
   }
@@ -156,44 +260,53 @@
   async function abrirListaCenarios(clientId, baseCanvasId) {
     document.getElementById('cenarios-lista-overlay')?.remove();
 
+    const effClientId = (clientId && clientId !== 'undefined') ? clientId : (window.activeClientId || (window.clientOfCanvas ? window.clientOfCanvas(baseCanvasId) : null));
+    const effBaseId = (baseCanvasId && baseCanvasId !== 'undefined') ? baseCanvasId : window.activeCanvasId;
+
+    if (!effClientId || !effBaseId) {
+      alert('Não foi possível identificar o cliente ou processo base.');
+      return;
+    }
+
     const ov = document.createElement('div');
     ov.id = 'cenarios-lista-overlay';
     ov.className = 'esc-overlay';
     ov.innerHTML = `
-      <div class="qd-box" style="max-width: 600px;">
+      <div class="qd-box" style="max-width:620px;">
         <div class="esc-head">
           <div>
-            <b>Cenários e Simulações "E Se"</b>
-            <div class="agd-sub">Versões alternativas baseadas no processo real</div>
+            <b><i class="fa-solid fa-code-branch"></i> Cenários & Simulações "E Se"</b>
+            <div class="agd-sub">Hipóteses operacionais derivadas do processo real</div>
           </div>
           <button class="agd-close" data-fechar-cenarios>✕</button>
         </div>
-        <div class="op-lista" id="cenarios-lista-conteudo">
-          <div style="text-align:center; padding: 20px; color:#94a3b8;"><i class="fa-solid fa-spinner fa-spin"></i> Carregando cenários...</div>
+        <div class="op-lista-corpo" id="cenarios-lista-conteudo" style="max-height:60vh; overflow-y:auto; padding:16px;">
+          <div style="text-align:center; padding:20px; color:#94a3b8;"><i class="fa-solid fa-spinner fa-spin"></i> Carregando cenários...</div>
         </div>
-        <div style="padding: 12px 18px; border-top: 1px solid rgba(255,255,255,0.08); display:flex; justify-content:flex-end;">
-          <button class="audit-btn" id="btn-novo-cenario-modal" style="margin:0;"><span class="audit-btn-inner"><i class="fa-solid fa-plus"></i> Novo Cenário</span></button>
+        <div class="esc-foot" style="padding:12px 16px; border-top:1px solid rgba(255,255,255,0.08); display:flex; justify-content:space-between; align-items:center;">
+          <button class="header-btn" data-fechar-cenarios>Fechar</button>
+          <button class="header-btn highlight-btn" id="btn-novo-cenario-modal"><i class="fa-solid fa-plus"></i> Novo Cenário</button>
         </div>
       </div>`;
+
     document.body.appendChild(ov);
 
     ov.addEventListener('click', (e) => {
       if (e.target.closest('[data-fechar-cenarios]') || e.target === ov) return ov.remove();
-      const id = e.target.closest('[data-abrir-cenario]')?.dataset.abrirCenario;
-      if (id) {
+      const card = e.target.closest('[data-abrir-cenario]');
+      if (card) {
+        const id = card.dataset.abrirCenario;
         ov.remove();
         if (window.openCanvas) window.openCanvas(id);
       }
-      if (e.target.closest('#btn-novo-cenario-modal')) {
-        ov.remove();
-        if (window.AudasysOportunidades?.abrirModalCriarCenario) {
-          window.AudasysOportunidades.abrirModalCriarCenario({ id: null, titulo: 'Novo Cenário Alternativo' });
-        }
-      }
     });
 
-    const effClientId = (clientId && clientId !== 'undefined') ? clientId : (window.activeClientId || (window.clientOfCanvas ? window.clientOfCanvas(baseCanvasId) : null));
-    const effBaseId = (baseCanvasId && baseCanvasId !== 'undefined') ? baseCanvasId : window.activeCanvasId;
+    ov.querySelector('#btn-novo-cenario-modal').onclick = () => {
+      ov.remove();
+      if (window.AudasysOportunidades?.abrirModalCriarCenario) {
+        window.AudasysOportunidades.abrirModalCriarCenario(null, effBaseId);
+      }
+    };
 
     try {
       const { cenarios } = await Audasys.api.listarCenarios(effClientId, effBaseId);

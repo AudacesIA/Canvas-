@@ -108,16 +108,29 @@ export function registerCanvasRoutes(router, { canvasService }) {
 
   router.get('/api/clients/:clientId/canvases/:canvasId/comparar', async (req, res, { clientId, canvasId }, url) => {
     const { compararCanvas, compararEmTexto } = await import('../core/comparador.js');
+    const { compararProcessosMarkdown } = await import('../core/markdownComparator.js');
     const cenario = await canvasService.getCanvas(clientId, canvasId);
     if (!cenario.derivadoDe) {
       throw httpError(422, `"${cenario.name}" não é um cenário — não há do que comparar. `
         + 'Compare a partir do canvas derivado, não do processo real.');
     }
     const base = await canvasService.getCanvas(clientId, cenario.derivadoDe.canvasId);
+    const client = await canvasService.getClient(clientId).catch(() => null);
+    const analiseMarkdown = compararProcessosMarkdown(base, cenario, { clienteNome: client?.name || clientId });
+    
     sendJson(res, 200, {
       comparacao: compararCanvas(base, cenario),
       texto: compararEmTexto(base, cenario),
+      analiseMarkdown,
     });
+  });
+
+  router.get('/api/clients/:clientId/canvases/:canvasId/markdown', async (req, res, { clientId, canvasId }) => {
+    const { canvasParaMarkdown } = await import('../core/processoMarkdown.js');
+    const canvas = await canvasService.getCanvas(clientId, canvasId);
+    const client = await canvasService.getClient(clientId).catch(() => null);
+    const markdown = canvasParaMarkdown(canvas, { clienteNome: client?.name || clientId });
+    sendJson(res, 200, { markdown, canvasId, name: canvas.name });
   });
 
   router.post('/api/clients/:clientId/canvases/:canvasId/duplicate', async (req, res, { clientId, canvasId }) => {
