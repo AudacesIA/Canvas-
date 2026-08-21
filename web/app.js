@@ -1,5 +1,25 @@
 // Audaces Canvas - Application Engine
 
+// 0. UNIVERSAL OVERLAY, MODAL & DRAWER STATE MACHINE
+window.OverlayManager = {
+  closeAll(except = null) {
+    if (except !== 'cenarios') document.getElementById('cenarios-lista-overlay')?.remove();
+    if (except !== 'oportunidades') document.getElementById('op-lista-overlay')?.remove();
+    if (except !== 'comparador') document.getElementById('comparador-modal')?.remove();
+    if (except !== 'notepad') document.getElementById('op-notepad-modal')?.remove();
+    if (except !== 'cenario-criar') document.getElementById('op-cenario-overlay')?.remove();
+    if (except !== 'audit') document.getElementById('audit-modal')?.classList.remove('open');
+    if (except !== 'toolsMenu') {
+      const menu = document.getElementById('header-tools-menu');
+      if (menu) menu.style.display = 'none';
+    }
+    if (except !== 'chat') {
+      const chatDrawer = document.getElementById('chat-drawer');
+      if (chatDrawer) chatDrawer.classList.remove('open');
+    }
+  }
+};
+
 // 1. STATE INITIALIZATION
 let nodes = [];
 let connections = [];
@@ -3049,14 +3069,30 @@ function showHomeView() {
   currentView = 'home';
   activeCanvasId = null;
 
-  document.getElementById('home-screen').style.display = 'flex';
-  document.getElementById('canvas-viewport').style.display = 'none';
-  document.querySelector('.node-palette').style.display = 'none';
-  document.getElementById('properties-panel').style.display = 'none';
-  document.getElementById('header-filter').style.display = 'none';
-  document.getElementById('header-breadcrumb').style.display = 'none';
-  document.getElementById('header-actions').style.display = 'none';
-  document.getElementById('btn-back-home').style.display = 'none';
+  window.OverlayManager?.closeAll();
+  const homeScreen = document.getElementById('home-screen');
+  if (homeScreen) homeScreen.style.display = 'flex';
+  
+  const canvasViewport = document.getElementById('canvas-viewport');
+  if (canvasViewport) canvasViewport.style.display = 'none';
+
+  const nodePalette = document.querySelector('.node-palette');
+  if (nodePalette) nodePalette.style.display = 'none';
+
+  const propPanel = document.getElementById('properties-panel');
+  if (propPanel) propPanel.style.display = 'none';
+
+  const titleWrapper = document.getElementById('header-canvas-title-wrapper');
+  if (titleWrapper) titleWrapper.style.display = 'none';
+
+  const breadcrumb = document.getElementById('header-breadcrumb');
+  if (breadcrumb) breadcrumb.style.display = 'none';
+
+  const headerActions = document.getElementById('header-actions');
+  if (headerActions) headerActions.style.display = 'none';
+
+  const cenarioWidget = document.getElementById('header-cenario-widget');
+  if (cenarioWidget) cenarioWidget.style.display = 'none';
 
   loadHome();
 }
@@ -3064,17 +3100,24 @@ function showHomeView() {
 function showCanvasView(canvasId, canvasName) {
   currentView = 'canvas';
 
+  window.OverlayManager?.closeAll();
   document.getElementById('home-screen').style.display = 'none';
   document.getElementById('canvas-viewport').style.display = '';
   document.querySelector('.node-palette').style.display = '';
   document.getElementById('properties-panel').style.display = '';
-  document.getElementById('header-filter').style.display = 'flex';
+  
+  const titleWrapper = document.getElementById('header-canvas-title-wrapper');
+  if (titleWrapper) {
+    titleWrapper.style.display = 'flex';
+    const titleInput = document.getElementById('header-canvas-title-input');
+    if (titleInput) titleInput.value = canvasName || 'Canvas sem título';
+  }
+
   document.getElementById('header-actions').style.display = 'flex';
-  document.getElementById('btn-back-home').style.display = '';
 
   // Show canvas name in breadcrumb area if available
   const breadcrumb = document.getElementById('header-breadcrumb');
-  breadcrumb.style.display = 'none'; // child canvas breadcrumb stays hidden initially
+  if (breadcrumb) breadcrumb.style.display = 'none'; // child canvas breadcrumb stays hidden initially
 }
 
 // ── Home rendering ────────────────────────────────────────────────────────────
@@ -3313,12 +3356,23 @@ async function openCanvas(canvasId) {
 }
 
 async function closeCanvas() {
-  AudasysAgent.detach();
+  try {
+    AudasysAgent.detach();
+  } catch (e) {}
+
   if (activeCanvasId) {
-    saveToLocalStorage();
-    await Audasys.persistence.flush();
+    try {
+      saveToLocalStorage();
+      await Audasys.persistence.flush();
+    } catch (e) {
+      console.warn('Erro ao salvar no closeCanvas:', e);
+    }
   }
-  Audasys.persistence.detach();
+
+  try {
+    Audasys.persistence.detach();
+  } catch (e) {}
+
   clearAllBoard();
   nodes = []; connections = []; notes = [];
   nextNodeId = 1; nextNoteId = 1;
@@ -3327,7 +3381,19 @@ async function closeCanvas() {
   window.activeCanvasId = null;
   window.activeClientId = null;
   childContext = null;
-  await refreshHome().catch(err => console.warn('home desatualizada', err));
+  window.currentCanvasDerivadoDe = null;
+
+  try {
+    if (window.AudasysOportunidades?.limpar) {
+      window.AudasysOportunidades.limpar();
+    }
+  } catch (e) {}
+
+  try {
+    await refreshHome();
+  } catch (err) {
+    console.warn('home desatualizada', err);
+  }
   showHomeView();
 }
 
@@ -3484,6 +3550,68 @@ Audasys.persistence.onState((state) => {
     // que sobrescrever silenciosamente o trabalho do outro lado.
     if (confirm('Este canvas foi alterado em outro lugar.\n\nRecarregar a versão do servidor? Suas alterações não salvas serão perdidas.')) {
       openCanvas(activeCanvasId);
+    }
+  }
+});
+
+// Direct Canvas Flow Name Editing
+const headerTitleInput = document.getElementById('header-canvas-title-input');
+if (headerTitleInput) {
+  headerTitleInput.addEventListener('blur', async () => {
+    const newName = headerTitleInput.value.trim() || 'Novo Canvas';
+    if (activeClientId && activeCanvasId) {
+      try {
+        await Audasys.api.renameCanvas(activeClientId, activeCanvasId, newName);
+        await refreshHome();
+      } catch (e) {
+        console.warn('Falha ao renomear canvas:', e);
+      }
+    }
+  });
+  headerTitleInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      headerTitleInput.blur();
+    }
+  });
+}
+
+// Dropdown de Ferramentas / Ações
+document.getElementById('btn-tools-dropdown')?.addEventListener('click', (e) => {
+  e.stopPropagation();
+  const menu = document.getElementById('header-tools-menu');
+  if (!menu) return;
+  const isVisible = menu.style.display === 'flex';
+  window.OverlayManager.closeAll('toolsMenu');
+  menu.style.display = isVisible ? 'none' : 'flex';
+});
+
+// Fechar dropdown ao clicar em qualquer item
+document.getElementById('header-tools-menu')?.addEventListener('click', () => {
+  const menu = document.getElementById('header-tools-menu');
+  if (menu) menu.style.display = 'none';
+});
+
+// Logo e Botão de Voltar para o Início
+document.getElementById('header-logo-home')?.addEventListener('click', () => {
+  closeCanvas();
+});
+
+document.getElementById('btn-back-home')?.addEventListener('click', () => {
+  closeCanvas();
+});
+
+// Global Escape Key & Click Outside para fechar overlays
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    window.OverlayManager.closeAll();
+  }
+});
+
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('#header-tools-dropdown-wrapper')) {
+    const menu = document.getElementById('header-tools-menu');
+    if (menu && menu.style.display === 'flex') {
+      menu.style.display = 'none';
     }
   }
 });

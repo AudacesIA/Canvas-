@@ -476,10 +476,21 @@
       existing.remove();
       return;
     }
+    window.OverlayManager?.closeAll('oportunidades');
     abrirLista();
+  }
+
+  function limpar() {
+    abertas.clear();
+    const c = document.getElementById('oportunidades-layer');
+    if (c) c.innerHTML = '';
+    document.querySelectorAll('.op-seta').forEach((e) => e.remove());
+    document.getElementById('op-lista-overlay')?.remove();
+    document.getElementById('op-notepad-modal')?.remove();
+    document.getElementById('op-cenario-overlay')?.remove();
   }
 
   document.getElementById('btn-oportunidades')?.addEventListener('click', toggleLista);
 
-  window.AudasysOportunidades = { renderTodos, novaNaAresta, abrirNotepad, abrirLista, toggleLista, abrirModalCriarCenario };
+  window.AudasysOportunidades = { renderTodos, novaNaAresta, abrirNotepad, abrirLista, toggleLista, abrirModalCriarCenario, limpar };
 })();

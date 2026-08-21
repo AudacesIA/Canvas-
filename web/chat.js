@@ -114,9 +114,11 @@
   function toggleChat() {
     drawer = criarDrawer();
     isOpen = drawer.classList.contains('open');
-    isOpen = !isOpen;
-    drawer.classList.toggle('open', isOpen);
     if (isOpen) {
+      drawer.classList.remove('open');
+    } else {
+      window.OverlayManager?.closeAll('chat');
+      drawer.classList.add('open');
       setTimeout(() => drawer.querySelector('#chat-input-text')?.focus(), 200);
     }
   }

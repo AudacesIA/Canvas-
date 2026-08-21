@@ -225,6 +225,7 @@
       existing.remove();
       return;
     }
+    window.OverlayManager?.closeAll('cenarios');
     abrirListaCenarios(clientId, baseCanvasId);
   }
 
@@ -234,6 +235,7 @@
       existing.remove();
       return;
     }
+    window.OverlayManager?.closeAll('comparador');
     abrirModalComparador(clientId, cenarioId);
   }
 
