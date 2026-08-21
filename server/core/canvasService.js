@@ -1,6 +1,8 @@
 import { hydrateCanvas, emptyCanvas } from './schema.js';
 import { newCanvasId, slugify } from './ids.js';
 import { withLock } from './locks.js';
+import { gerarFluxoCenario } from './scenarioEngine.js';
+import { canvasParaMarkdown } from './processoMarkdown.js';
 
 /** Erro com status HTTP, para as rotas traduzirem sem inventar mapeamento. */
 export function httpError(status, message, extra = {}) {
@@ -147,10 +149,19 @@ export class CanvasService {
         'Cenário exige "premissa": a frase que o originou. Sem ela, daqui a seis semanas '
         + 'ninguém consegue contestar o desenho — nem lembrar por que ele existe.');
     }
+
+    // Gera o fluxo transformado com base no mapa de processos original e na premissa
+    const transformado = gerarFluxoCenario(base, { premissa, postura });
+    const seed = {
+      ...strip(base),
+      nodes: transformado.nodes,
+      connections: transformado.connections,
+    };
+
     const cenario = await this.createCanvas(clientId, {
       name: nome || `${base.name} — ${premissa}`.slice(0, 80),
       folderId: base.folderId,
-      seed: strip(base),
+      seed,
       derivadoDe: {
         canvasId: base.id,
         premissa: String(premissa).trim(),
@@ -174,6 +185,40 @@ export class CanvasService {
     }
 
     return cenario;
+  }
+
+  /** Salva e versiona o Canvas como um "Mapa de Processos" em Markdown. */
+  async salvarMapaProcesso(clientId, canvasId, { autor = 'Consultor', nota = '' } = {}) {
+    const canvas = await this.getCanvas(clientId, canvasId);
+    const client = await this.storage.readClient(clientId).catch(() => null);
+    const markdown = canvasParaMarkdown(canvas, { clienteNome: client?.name || clientId });
+    
+    const versoesMapa = Array.isArray(canvas.versoesMapa) ? [...canvas.versoesMapa] : [];
+    const novaVersao = {
+      versao: versoesMapa.length + 1,
+      criadoEm: new Date().toISOString(),
+      rev: canvas.rev,
+      nodeCount: (canvas.nodes || []).length,
+      edgeCount: (canvas.connections || []).length,
+      bottleneckCount: (canvas.nodes || []).filter(n => n.bottleneck).length,
+      autor,
+      nota: nota || `Versão ${versoesMapa.length + 1} do Mapa de Processos`,
+      markdown,
+    };
+
+    versoesMapa.push(novaVersao);
+
+    const updated = await this.saveCanvas(clientId, canvasId, {
+      versoesMapa,
+      mapaProcessoAtual: novaVersao,
+    });
+
+    return { versao: novaVersao, totalVersoes: versoesMapa.length, canvas: updated };
+  }
+
+  async listarVersoesMapa(clientId, canvasId) {
+    const canvas = await this.getCanvas(clientId, canvasId);
+    return canvas.versoesMapa || [];
   }
 
   /** Cenários derivados de um canvas. */

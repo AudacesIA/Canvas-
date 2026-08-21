@@ -553,6 +553,8 @@ export function hydrateCanvas(raw, { id, clientId } = {}) {
      */
     oportunidades: (Array.isArray(doc.oportunidades) ? doc.oportunidades.map(hydrateOportunidade) : [])
       .filter((op) => edges.some((e) => e.id === op.arestaId)),
+    versoesMapa: Array.isArray(doc.versoesMapa) ? doc.versoesMapa : [],
+    mapaProcessoAtual: doc.mapaProcessoAtual && typeof doc.mapaProcessoAtual === 'object' ? doc.mapaProcessoAtual : null,
     zoom: Number(doc.zoom) || 1,
     panOffset: doc.panOffset && typeof doc.panOffset === 'object' ? doc.panOffset : { x: 100, y: 100 },
     nextNodeId: Number.isInteger(doc.nextNodeId) ? doc.nextNodeId : 1,

@@ -60,4 +60,10 @@ export const client = {
     request('POST', `/api/clients/${clientId}/canvases/${canvasId}/layout`, body),
   validate: (clientId, canvasId) =>
     request('GET', `/api/clients/${clientId}/canvases/${canvasId}/validate`),
+  salvarMapa: (clientId, canvasId, body) =>
+    request('POST', `/api/clients/${clientId}/canvases/${canvasId}/salvar-mapa`, body),
+  versoesMapa: (clientId, canvasId) =>
+    request('GET', `/api/clients/${clientId}/canvases/${canvasId}/versoes-mapa`),
+  markdown: (clientId, canvasId) =>
+    request('GET', `/api/clients/${clientId}/canvases/${canvasId}/markdown`),
 };

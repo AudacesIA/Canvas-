@@ -3600,6 +3600,126 @@ document.getElementById('btn-back-home')?.addEventListener('click', () => {
   closeCanvas();
 });
 
+// Salvar e Versionar como Mapa de Processos (.md)
+document.getElementById('btn-salvar-mapa')?.addEventListener('click', async () => {
+  if (!activeClientId || !activeCanvasId) return;
+  try {
+    saveToLocalStorage();
+    await Audasys.persistence.flush();
+
+    const res = await Audasys.api.salvarMapaProcesso(activeClientId, activeCanvasId, {
+      autor: 'Consultor',
+      nota: `Mapa gerado a partir do Canvas com ${nodes.length} passos`,
+    });
+
+    const v = res.versao;
+    abrirModalMapaProcesso(v, `Mapa de Processos salvo com sucesso como Versão ${v.versao}!`);
+  } catch (err) {
+    reportError('salvar o mapa de processos', err);
+  }
+});
+
+// Histórico de Versões do Mapa de Processos (.md)
+document.getElementById('btn-historico-mapas')?.addEventListener('click', async () => {
+  if (!activeClientId || !activeCanvasId) return;
+  try {
+    const { versoes } = await Audasys.api.listarVersoesMapa(activeClientId, activeCanvasId);
+    abrirModalHistoricoMapas(versoes);
+  } catch (err) {
+    reportError('listar histórico de mapas', err);
+  }
+});
+
+function abrirModalMapaProcesso(versao, msgSucesso = '') {
+  document.getElementById('mapa-processo-modal')?.remove();
+  window.OverlayManager?.closeAll('mapa-processo');
+
+  const ov = document.createElement('div');
+  ov.id = 'mapa-processo-modal';
+  ov.className = 'esc-overlay';
+  ov.innerHTML = `
+    <div class="qd-box" style="max-width: 760px; max-height: 88vh; display:flex; flex-direction:column;">
+      <div class="esc-head">
+        <div>
+          <b><i class="fa-solid fa-file-signature"></i> Mapa de Processos (Versão ${versao.versao})</b>
+          <div class="agd-sub">${new Date(versao.criadoEm).toLocaleString('pt-BR')} · ${versao.nodeCount} passos · rev.${versao.rev}</div>
+        </div>
+        <button class="agd-close" data-fechar-mapa>✕</button>
+      </div>
+      ${msgSucesso ? `<div style="background:rgba(16,185,129,0.12); color:#34d399; font-size:12px; font-weight:600; padding:10px 18px; border-bottom:1px solid rgba(16,185,129,0.2);"><i class="fa-solid fa-circle-check"></i> ${escapeHtml(msgSucesso)}</div>` : ''}
+      <div style="flex:1; overflow-y:auto; padding:16px;">
+        <pre style="background:#090d16; border:1px solid rgba(255,255,255,0.08); border-radius:8px; padding:14px; font-size:12px; color:#cbd5e1; white-space:pre-wrap; max-height:55vh; overflow-y:auto;">${escapeHtml(versao.markdown)}</pre>
+      </div>
+      <div class="esc-foot" style="padding:12px 18px; border-top:1px solid rgba(255,255,255,0.08); display:flex; justify-content:space-between; align-items:center;">
+        <button class="header-btn" data-fechar-mapa>Fechar</button>
+        <button class="header-btn highlight-btn" id="btn-copiar-md-modal"><i class="fa-solid fa-copy"></i> Copiar Markdown (.md)</button>
+      </div>
+    </div>`;
+
+  document.body.appendChild(ov);
+
+  ov.addEventListener('click', (e) => {
+    if (e.target.closest('[data-fechar-mapa]') || e.target === ov) ov.remove();
+  });
+
+  ov.querySelector('#btn-copiar-md-modal')?.addEventListener('click', () => {
+    navigator.clipboard.writeText(versao.markdown);
+    alert('Markdown da Versão copiado para a área de transferência!');
+  });
+}
+
+function abrirModalHistoricoMapas(versoes) {
+  document.getElementById('historico-mapas-modal')?.remove();
+  window.OverlayManager?.closeAll('historico-mapas');
+
+  const ov = document.createElement('div');
+  ov.id = 'historico-mapas-modal';
+  ov.className = 'esc-overlay';
+  ov.innerHTML = `
+    <div class="qd-box" style="max-width: 680px; max-height: 85vh; display:flex; flex-direction:column;">
+      <div class="esc-head">
+        <div>
+          <b><i class="fa-solid fa-clock-rotate-left"></i> Histórico de Mapas de Processos (.md)</b>
+          <div class="agd-sub">Versões oficiais salvas para este processo</div>
+        </div>
+        <button class="agd-close" data-fechar-hist>✕</button>
+      </div>
+      <div style="flex:1; overflow-y:auto; padding:16px;">
+        ${!versoes || versoes.length === 0 ? '<div class="qd-vazia">Nenhum Mapa de Processos foi salvo ainda. Use "Salvar como Mapa de Processos" para criar a primeira versão versionada.</div>' : `
+          <div style="display:flex; flex-direction:column; gap:10px;">
+            ${[...versoes].reverse().map(v => `
+              <div style="background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08); border-radius:8px; padding:12px 14px; display:flex; justify-content:space-between; align-items:center;">
+                <div>
+                  <div style="font-weight:700; color:#f8fafc; font-size:13.5px;"><i class="fa-solid fa-file-lines" style="color:#60a5fa; margin-right:6px;"></i> Versão ${v.versao} ${v.versao === versoes.length ? '<span style="font-size:10px; color:#10b981; background:rgba(16,185,129,0.15); padding:2px 6px; border-radius:4px; margin-left:4px;">ATUAL</span>' : ''}</div>
+                  <div style="font-size:11.5px; color:#94a3b8; margin-top:2px;">${new Date(v.criadoEm).toLocaleString('pt-BR')} · ${v.nodeCount} passos · ${v.edgeCount} arestas</div>
+                </div>
+                <button class="arb-btn" data-ver-versao="${v.versao}"><i class="fa-solid fa-eye"></i> Visualizar</button>
+              </div>
+            `).join('')}
+          </div>
+        `}
+      </div>
+      <div class="esc-foot" style="padding:12px 18px; border-top:1px solid rgba(255,255,255,0.08); display:flex; justify-content:flex-end;">
+        <button class="header-btn" data-fechar-hist>Fechar</button>
+      </div>
+    </div>`;
+
+  document.body.appendChild(ov);
+
+  ov.addEventListener('click', (e) => {
+    if (e.target.closest('[data-fechar-hist]') || e.target === ov) return ov.remove();
+    const btn = e.target.closest('[data-ver-versao]');
+    if (btn) {
+      const vNum = parseInt(btn.dataset.verVersao);
+      const v = versoes.find(x => x.versao === vNum);
+      if (v) {
+        ov.remove();
+        abrirModalMapaProcesso(v);
+      }
+    }
+  });
+}
+
 // Global Escape Key & Click Outside para fechar overlays
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {

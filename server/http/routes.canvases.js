@@ -133,6 +133,17 @@ export function registerCanvasRoutes(router, { canvasService }) {
     sendJson(res, 200, { markdown, canvasId, name: canvas.name });
   });
 
+  router.post('/api/clients/:clientId/canvases/:canvasId/salvar-mapa', async (req, res, { clientId, canvasId }) => {
+    const body = await readJsonBody(req).catch(() => ({}));
+    const result = await canvasService.salvarMapaProcesso(clientId, canvasId, body);
+    sendJson(res, 201, result);
+  });
+
+  router.get('/api/clients/:clientId/canvases/:canvasId/versoes-mapa', async (req, res, { clientId, canvasId }) => {
+    const versoes = await canvasService.listarVersoesMapa(clientId, canvasId);
+    sendJson(res, 200, { versoes });
+  });
+
   router.post('/api/clients/:clientId/canvases/:canvasId/duplicate', async (req, res, { clientId, canvasId }) => {
     sendJson(res, 201, { canvas: await canvasService.duplicateCanvas(clientId, canvasId) });
   });

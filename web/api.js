@@ -91,6 +91,10 @@
       request('GET', `/api/clients/${clientId}/canvases/${canvasId}/markdown`),
     renameCanvas: (clientId, canvasId, name) =>
       request('PATCH', `/api/clients/${clientId}/canvases/${canvasId}`, { body: { name } }),
+    salvarMapaProcesso: (clientId, canvasId, { autor = 'Consultor', nota = '' } = {}) =>
+      request('POST', `/api/clients/${clientId}/canvases/${canvasId}/salvar-mapa`, { body: { autor, nota } }),
+    listarVersoesMapa: (clientId, canvasId) =>
+      request('GET', `/api/clients/${clientId}/canvases/${canvasId}/versoes-mapa`),
   };
 
   // --- estado da sessão de escrita ---------------------------------------

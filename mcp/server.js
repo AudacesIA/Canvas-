@@ -559,6 +559,46 @@ server.registerTool(
 );
 
 server.registerTool(
+  'salvar_mapa_processo',
+  {
+    title: 'Salvar como Mapa de Processos (Markdown Versionado)',
+    description:
+      'Sintetiza o fluxo desenhado no canvas em um documento Markdown estruturado oficial (processo.md) '
+      + 'e salva uma nova versão imutável no histórico do projeto.',
+    inputSchema: {
+      clientId: z.string(),
+      canvasId: z.string(),
+      autor: z.string().optional().describe('Nome ou papel de quem está aprovando a versão'),
+      nota: z.string().optional().describe('Nota de versão (ex: "Versão após validação com Diretoria")'),
+    },
+  },
+  guard(async ({ clientId, canvasId, autor, nota }) => {
+    const res = await client.salvarMapa(clientId, canvasId, { autor, nota });
+    return text(`✅ Mapa de Processos salvo com sucesso como Versão ${res.versao.versao}!\n`
+      + `Data: ${res.versao.criadoEm} | Passos: ${res.versao.nodeCount} | Gargalos: ${res.versao.bottleneckCount}\n\n`
+      + `--- PREVIEW DO MARKDOWN ---\n`
+      + res.versao.markdown);
+  }),
+);
+
+server.registerTool(
+  'get_mapa_processo',
+  {
+    title: 'Obter Mapa de Processos em Markdown',
+    description:
+      'Retorna o documento Markdown estruturado de um canvas ou a lista de versões salvas do mapa.',
+    inputSchema: {
+      clientId: z.string(),
+      canvasId: z.string(),
+    },
+  },
+  guard(async ({ clientId, canvasId }) => {
+    const res = await client.markdown(clientId, canvasId);
+    return text(res.markdown);
+  }),
+);
+
+server.registerTool(
   'validate_canvas',
   {
     title: 'Conferir o mapa',
