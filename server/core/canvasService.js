@@ -81,6 +81,9 @@ export class CanvasService {
         rev: doc.rev ?? 0,
         nodeCount: Array.isArray(doc.nodes) ? doc.nodes.length : 0,
         edgeCount: Array.isArray(doc.connections) ? doc.connections.length : 0,
+        bottleneckCount: Array.isArray(doc.nodes) ? doc.nodes.filter((n) => n.bottleneck).length : 0,
+        mapaProcessoAtual: doc.mapaProcessoAtual ?? null,
+        versoesMapaCount: Array.isArray(doc.versoesMapa) ? doc.versoesMapa.length : 0,
         // Sem isto na projeção, a home e o agente não conseguem distinguir o
         // processo real do cenário — e distinguir é o ponto do recurso.
         derivadoDe: doc.derivadoDe ?? null,
@@ -130,14 +133,10 @@ export class CanvasService {
   /**
    * Cenário "e se": um fork do processo real, com vínculo de volta.
    *
-   * É duplicação, mas não é cópia solta. A diferença entre os dois está no
-   * `derivadoDe`, e ela é o que impede o pior risco deste recurso: um cenário
-   * aceito por engano virar "o processo que a empresa tem".
-   *
-   * Cenário de cenário é recusado. Um fork de fork perde a referência ao que a
-   * operação realmente faz, e a comparação deixa de significar alguma coisa.
+   * Invariante de Domínio: Empresa -> Processo -> Cenário.
+   * Um cenário SÓ pode ser criado se o processo pai tiver sido salvo como "Mapa de Processos".
    */
-  async criarCenario(clientId, canvasId, { nome, premissa, postura = 'realista', oportunidadeId = null } = {}) {
+  async criarCenario(clientId, canvasId, { nome, premissa, postura = 'realista', oportunidadeId = null, autoPromoverMapa = true } = {}) {
     const base = await this.getCanvas(clientId, canvasId);
     if (base.derivadoDe) {
       throw httpError(409,
@@ -148,6 +147,20 @@ export class CanvasService {
       throw httpError(422,
         'Cenário exige "premissa": a frase que o originou. Sem ela, daqui a seis semanas '
         + 'ninguém consegue contestar o desenho — nem lembrar por que ele existe.');
+    }
+
+    // Invariante: Processo precisa ter baseline registrado ("Mapa de Processos")
+    if (!base.mapaProcessoAtual && (!base.versoesMapa || base.versoesMapa.length === 0)) {
+      if (autoPromoverMapa && base.nodes && base.nodes.length > 0) {
+        await this.salvarMapaProcesso(clientId, canvasId, {
+          autor: 'Sistema (Auto-Baseline)',
+          nota: 'Baseline oficial registrado automaticamente para criação de cenários',
+        });
+      } else {
+        throw httpError(422,
+          'Um cenário só pode ser criado a partir de um processo salvo como "Mapa de Processos". '
+          + 'Salve o mapa deste processo primeiro para estabelecer a linha de base.');
+      }
     }
 
     // Gera o fluxo transformado com base no mapa de processos original e na premissa

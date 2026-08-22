@@ -1513,10 +1513,10 @@ function applyAreaFilter() {
   }
 }
 
-filterAreaSelect.addEventListener('change', applyAreaFilter);
+filterAreaSelect?.addEventListener('change', applyAreaFilter);
 
 // Tools tag management
-propTools.addEventListener('input', () => {
+propTools?.addEventListener('input', () => {
   if (selectedNodeId) {
     const node = nodes.find(n => n.id === selectedNodeId);
     if (node) {
@@ -1530,6 +1530,7 @@ propTools.addEventListener('input', () => {
 });
 
 function renderTagsPreview(toolsString) {
+  if (!propToolsTagsPreview) return;
   propToolsTagsPreview.innerHTML = '';
   if (!toolsString) return;
   
@@ -1549,14 +1550,15 @@ function normalizeSubprocesses(subs) {
   return (subs || []).map(s => typeof s === 'string' ? { text: s, done: false } : s);
 }
 
-document.getElementById('btn-add-subprocess').addEventListener('click', () => {
-  const text = document.getElementById('subprocess-input').value.trim();
+document.getElementById('btn-add-subprocess')?.addEventListener('click', () => {
+  const input = document.getElementById('subprocess-input');
+  const text = input ? input.value.trim() : '';
   if (text && selectedNodeId) {
     const node = nodes.find(n => n.id === selectedNodeId);
     if (node) {
       node.subprocesses = normalizeSubprocesses(node.subprocesses);
       node.subprocesses.push({ text, done: false });
-      document.getElementById('subprocess-input').value = '';
+      if (input) input.value = '';
       renderSubprocessList(node);
       updateNodePreviewDetails(node);
       saveToLocalStorage();
@@ -1564,8 +1566,8 @@ document.getElementById('btn-add-subprocess').addEventListener('click', () => {
   }
 });
 
-document.getElementById('subprocess-input').addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') document.getElementById('btn-add-subprocess').click();
+document.getElementById('subprocess-input')?.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') document.getElementById('btn-add-subprocess')?.click();
 });
 
 function renderSubprocessList(node) {
@@ -1618,28 +1620,28 @@ function renderSubprocessList(node) {
 }
 
 // Subprocess mode toggle
-document.getElementById('btn-mode-checklist').addEventListener('click', () => {
+document.getElementById('btn-mode-checklist')?.addEventListener('click', () => {
   if (!selectedNodeId) return;
   const node = nodes.find(n => n.id === selectedNodeId);
   if (!node) return;
   node.subprocessMode = 'checklist';
   document.getElementById('subprocess-checklist-section').style.display = '';
   document.getElementById('subprocess-canvas-section').style.display = 'none';
-  document.getElementById('btn-mode-checklist').classList.add('active');
-  document.getElementById('btn-mode-canvas').classList.remove('active');
+  document.getElementById('btn-mode-checklist')?.classList.add('active');
+  document.getElementById('btn-mode-canvas')?.classList.remove('active');
   updateNodePreviewDetails(node);
   saveToLocalStorage();
 });
 
-document.getElementById('btn-mode-canvas').addEventListener('click', () => {
+document.getElementById('btn-mode-canvas')?.addEventListener('click', () => {
   if (!selectedNodeId) return;
   const node = nodes.find(n => n.id === selectedNodeId);
   if (!node) return;
   node.subprocessMode = 'canvas';
   document.getElementById('subprocess-checklist-section').style.display = 'none';
   document.getElementById('subprocess-canvas-section').style.display = '';
-  document.getElementById('btn-mode-checklist').classList.remove('active');
-  document.getElementById('btn-mode-canvas').classList.add('active');
+  document.getElementById('btn-mode-checklist')?.classList.remove('active');
+  document.getElementById('btn-mode-canvas')?.classList.add('active');
   // Update child canvas count label
   const count = node.childCanvas?.nodes?.length || 0;
   const countEl = document.getElementById('child-canvas-count');
@@ -1653,7 +1655,7 @@ document.getElementById('btn-mode-canvas').addEventListener('click', () => {
   saveToLocalStorage();
 });
 
-document.getElementById('btn-enter-child-canvas').addEventListener('click', () => {
+document.getElementById('btn-enter-child-canvas')?.addEventListener('click', () => {
   if (!selectedNodeId) return;
   const node = nodes.find(n => n.id === selectedNodeId);
   if (node) navigateToChildCanvas(node);
@@ -3216,14 +3218,35 @@ function renderFolderDOM(folder, canvases, home) {
   const body = document.createElement('div');
   body.className = 'home-folder-body';
 
-  // Canvas cards
-  canvases.forEach(cv => body.appendChild(renderCanvasCard(cv, folder, home)));
+  const POSTURA_LABELS = {
+    realista: { label: 'Realista', cor: '#3b82f6', bg: 'rgba(59,130,246,0.15)' },
+    otimista: { label: 'Otimista', cor: '#10b981', bg: 'rgba(16,185,129,0.15)' },
+    pessimista: { label: 'Pessimista', cor: '#f59e0b', bg: 'rgba(245,158,11,0.15)' },
+    exploratorio: { label: 'Exploratória', cor: '#a855f7', bg: 'rgba(168,85,247,0.15)' },
+  };
 
-  // "+" add canvas card
+  // Separação Taxonômica Estrita: Processos Reais (As-Is) vs Cenários (To-Be)
+  const processos = canvases.filter(c => !c.derivadoDe);
+  const cenarios = canvases.filter(c => !!c.derivadoDe);
+
+  // Renderiza cada Processo Principal da Empresa
+  processos.forEach(proc => {
+    const cenariosFilhos = cenarios.filter(s => s.derivadoDe?.canvasId === proc.id);
+    body.appendChild(renderProcessoCard(proc, cenariosFilhos, folder, home, POSTURA_LABELS));
+  });
+
+  // Se houver cenários órfãos de processos apagados, exibe em contingência
+  const procIds = new Set(processos.map(p => p.id));
+  const cenariosOrfaos = cenarios.filter(s => !procIds.has(s.derivadoDe?.canvasId));
+  if (cenariosOrfaos.length > 0) {
+    cenariosOrfaos.forEach(s => body.appendChild(renderProcessoCard(s, [], folder, home, POSTURA_LABELS)));
+  }
+
+  // "+" card para criar Novo Processo Real
   const addCard = document.createElement('div');
   addCard.className = 'canvas-home-card add-card';
-  addCard.innerHTML = `<i class="fa-solid fa-plus"></i> Novo Canvas`;
-  addCard.addEventListener('click', () => createCanvas(folder.id));
+  addCard.innerHTML = `<i class="fa-solid fa-plus"></i> Novo Processo`;
+  addCard.addEventListener('click', () => createCanvas(folder.id, 'Novo Processo'));
   body.appendChild(addCard);
 
   section.appendChild(header);
@@ -3231,34 +3254,98 @@ function renderFolderDOM(folder, canvases, home) {
   return section;
 }
 
-function renderCanvasCard(cv, folder, home) {
+function renderProcessoCard(cv, cenariosFilhos, folder, home, POSTURA_LABELS) {
   const card = document.createElement('div');
   card.className = 'canvas-home-card';
   card.id = `canvas-card-${cv.id}`;
+
+  const temMapa = !!(cv.mapaProcessoAtual || cv.versoesMapaCount > 0);
+  const versaoNum = cv.mapaProcessoAtual?.versao || cv.versoesMapaCount || 1;
+
+  let cenariosHtml = '';
+  if (cenariosFilhos && cenariosFilhos.length > 0) {
+    cenariosHtml = `
+      <div class="home-cenarios-nested">
+        <div class="home-cenarios-title">
+          <span><i class="fa-solid fa-code-branch" style="color:#60a5fa;"></i> Cenários & Simulações (${cenariosFilhos.length})</span>
+        </div>
+        ${cenariosFilhos.map(s => {
+          const postura = POSTURA_LABELS[s.derivadoDe?.postura || 'realista'] || POSTURA_LABELS.realista;
+          return `
+            <div class="home-cenario-item" data-cenario-id="${s.id}" style="border-left-color:${postura.cor};">
+              <div style="flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
+                <span class="op-postura-badge" style="color:${postura.cor};background:${postura.bg};font-size:9px;padding:2px 5px;">${postura.label}</span>
+                <span style="font-size:12px; font-weight:600; color:#f1f5f9; margin-left:4px;">${escapeHtml(s.name)}</span>
+              </div>
+              <div class="home-cenario-btn-group">
+                <button class="arb-btn primary" data-open-cenario="${s.id}" style="font-size:10px; padding:3px 7px;" title="Abrir fluxo do cenário"><i class="fa-solid fa-arrow-up-right-from-square"></i></button>
+                <button class="arb-btn" data-comp-cenario="${s.id}" style="font-size:10px; padding:3px 7px;" title="Comparar contra o Processo Real"><i class="fa-solid fa-code-compare"></i></button>
+              </div>
+            </div>`;
+        }).join('')}
+        <button class="btn-novo-cenario-home" data-add-cenario="${cv.id}"><i class="fa-solid fa-plus"></i> Novo Cenário "E Se"</button>
+      </div>`;
+  } else if (!cv.derivadoDe) {
+    cenariosHtml = `
+      <div class="home-cenarios-nested">
+        <button class="btn-novo-cenario-home" data-add-cenario="${cv.id}"><i class="fa-solid fa-plus"></i> Criar Cenário "E Se"</button>
+      </div>`;
+  }
 
   card.innerHTML = `
     <div class="canvas-card-menu">
       <button class="canvas-card-menu-btn" title="Ações"><i class="fa-solid fa-ellipsis"></i></button>
     </div>
-    <div class="canvas-card-name">${escapeHtml(cv.name)}</div>
-    <div class="canvas-card-meta"><i class="fa-regular fa-clock"></i> ${formatDate(cv.lastModified)}${
-      cv.pendingChangesets
-        ? `<span class="canvas-card-pending" title="O agente propôs alterações que ainda não foram revisadas"><i class="fa-solid fa-wand-magic-sparkles"></i> ${cv.pendingChangesets}</span>`
-        : ''
-    }</div>
+    <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:8px;">
+      <div class="canvas-card-name" style="cursor:pointer;">${escapeHtml(cv.name)}</div>
+      ${cv.derivadoDe ? `<span class="op-postura-badge" style="color:#60a5fa;background:rgba(96,165,250,0.15);font-size:10px;">CENÁRIO</span>` : (temMapa ? `<span class="badge-mapa-status versao"><i class="fa-solid fa-file-circle-check"></i> Mapa v${versaoNum}</span>` : `<span class="badge-mapa-status rascunho"><i class="fa-solid fa-pencil"></i> Rascunho</span>`)}
+    </div>
+    <div class="canvas-card-meta">
+      <i class="fa-regular fa-clock"></i> ${formatDate(cv.lastModified)} · 
+      <span>${cv.nodeCount || 0} passos</span>
+      ${cv.bottleneckCount ? `· <span style="color:#fbbf24; font-weight:600;"><i class="fa-solid fa-triangle-exclamation"></i> ${cv.bottleneckCount} gargalo(s)</span>` : ''}
+      ${cv.pendingChangesets ? `<span class="canvas-card-pending" title="Alterações pendentes do Copilot"><i class="fa-solid fa-wand-magic-sparkles"></i> ${cv.pendingChangesets}</span>` : ''}
+    </div>
+    ${cenariosHtml}
   `;
 
-  // Open canvas on card click (not on menu)
+  // Abrir Processo Real ao clicar no card (fora de botões)
   card.addEventListener('click', (e) => {
-    if (e.target.closest('.canvas-card-menu') || e.target.closest('.card-context-menu')) return;
+    if (e.target.closest('.canvas-card-menu') || e.target.closest('.card-context-menu') || e.target.closest('.home-cenarios-nested')) return;
     openCanvas(cv.id);
+  });
+
+  // Ações nos botões de cenários
+  card.querySelector('.canvas-card-name')?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    openCanvas(cv.id);
+  });
+
+  card.querySelectorAll('[data-open-cenario]').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      openCanvas(btn.dataset.openCenario);
+    });
+  });
+
+  card.querySelectorAll('[data-comp-cenario]').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      window.AudasysComparador?.abrirModalComparador(folder.id, btn.dataset.compCenario);
+    });
+  });
+
+  card.querySelector('[data-add-cenario]')?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (window.AudasysOportunidades?.abrirModalCriarCenario) {
+      window.AudasysOportunidades.abrirModalCriarCenario(null, cv.id);
+    }
   });
 
   // Context menu
   const menuBtn = card.querySelector('.canvas-card-menu-btn');
-  menuBtn.addEventListener('click', (e) => {
+  menuBtn?.addEventListener('click', (e) => {
     e.stopPropagation();
-    // Close any open menus first
     document.querySelectorAll('.card-context-menu').forEach(m => m.remove());
 
     const menu = document.createElement('div');
@@ -3298,7 +3385,6 @@ function renderCanvasCard(cv, folder, home) {
 
     card.appendChild(menu);
 
-    // Close on outside click
     setTimeout(() => {
       document.addEventListener('click', () => menu.remove(), { once: true });
     }, 0);

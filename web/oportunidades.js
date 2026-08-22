@@ -211,10 +211,16 @@
   });
 
   /**
-   * Modal de Criação / Simulação de Cenário "E Se" a partir de uma Oportunidade.
+   * Modal de Criação / Simulação de Cenário "E Se" a partir de uma Oportunidade ou Processo Real.
    */
-  function abrirModalCriarCenario(op) {
+  function abrirModalCriarCenario(op = null, baseCanvasId = null) {
     document.getElementById('simular-cenario-modal')?.remove();
+
+    const effCanvasId = baseCanvasId || activeCanvasId || window.activeCanvasId;
+    const effClientId = activeClientId || window.activeClientId || (window.clientOfCanvas ? window.clientOfCanvas(effCanvasId) : null);
+
+    const tituloOp = op?.titulo || '';
+    const posturaSugerida = op?.posturaSugerida || 'realista';
 
     const modal = document.createElement('div');
     modal.id = 'simular-cenario-modal';
@@ -226,25 +232,25 @@
           <div class="modal-title-glow" style="color:var(--accent-glow)">
             <i class="fa-solid fa-bolt"></i> SIMULAR CENÁRIO "E SE"
           </div>
-          <p class="modal-subtitle">Materializa esta oportunidade de receita em um fluxo de processo alternativo comparável.</p>
+          <p class="modal-subtitle">Deriva uma simulação visual (To-Be) a partir do Mapa de Processos oficial.</p>
         </div>
         <div class="modal-body" style="padding: 16px 0;">
           <div class="panel-section">
             <label for="sc-premissa">Premissa do Cenário (A frase-guia):</label>
-            <input type="text" id="sc-premissa" value="${escapeHtml(op.titulo)}" placeholder="Ex: Terceirizar logística Sul com base em MG" style="width:100%;margin-top:6px;padding:8px 12px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.15);border-radius:6px;color:#fff;">
+            <input type="text" id="sc-premissa" value="${escapeHtml(tituloOp)}" placeholder="Ex: Terceirizar logística Sul com operador parceiro" style="width:100%;margin-top:6px;padding:8px 12px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.15);border-radius:6px;color:#fff;">
           </div>
           <div class="panel-section" style="margin-top:14px;">
             <label for="sc-postura">Postura da Simulação:</label>
             <select id="sc-postura" style="width:100%;margin-top:6px;padding:8px 12px;background:rgba(15,23,42,0.9);border:1px solid rgba(255,255,255,0.15);border-radius:6px;color:#fff;">
-              <option value="realista" ${op.posturaSugerida === 'realista' ? 'selected' : ''}>🟦 Realista — Ajustes em rotina e capacidade atual</option>
-              <option value="otimista" ${op.posturaSugerida === 'otimista' ? 'selected' : ''}>🟩 Otimista — Eliminação direta de gargalos e handoffs</option>
-              <option value="pessimista" ${op.posturaSugerida === 'pessimista' ? 'selected' : ''}>🟨 Pessimista — Restrição severa de custo ou fornecedor</option>
-              <option value="exploratorio" ${op.posturaSugerida === 'exploratorio' ? 'selected' : ''}>🟪 Exploratória — Benchmarks distantes / Automação de ponta (Braço Robótico)</option>
+              <option value="realista" ${posturaSugerida === 'realista' ? 'selected' : ''}>🟦 Realista — Ajustes em rotina e capacidade atual</option>
+              <option value="otimista" ${posturaSugerida === 'otimista' ? 'selected' : ''}>🟩 Otimista — Eliminação direta de gargalos e handoffs</option>
+              <option value="pessimista" ${posturaSugerida === 'pessimista' ? 'selected' : ''}>🟨 Pessimista — Restrição severa de custo ou fornecedor</option>
+              <option value="exploratorio" ${posturaSugerida === 'exploratorio' ? 'selected' : ''}>🟪 Exploratória — Benchmarks distantes / Automação IA de ponta</option>
             </select>
           </div>
           <div class="panel-section" style="margin-top:14px;">
             <label for="sc-nome">Nome do Canvas Derivado (Opcional):</label>
-            <input type="text" id="sc-nome" placeholder="Cenário: ${escapeHtml(op.titulo)}" style="width:100%;margin-top:6px;padding:8px 12px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.15);border-radius:6px;color:#fff;">
+            <input type="text" id="sc-nome" placeholder="Cenário: ${escapeHtml(tituloOp || 'Simulação')}" style="width:100%;margin-top:6px;padding:8px 12px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.15);border-radius:6px;color:#fff;">
           </div>
         </div>
         <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:16px;border-top:1px solid rgba(255,255,255,0.08);padding-top:14px;">
@@ -275,18 +281,20 @@
         btn.innerHTML = '<span class="audit-btn-inner"><i class="fa-solid fa-spinner fa-spin"></i> Criando Cenário...</span>';
 
         try {
-          const { canvas: cenario } = await Audasys.api.criarCenario(activeClientId, activeCanvasId, {
+          const { canvas: cenario } = await Audasys.api.criarCenario(effClientId, effCanvasId, {
             nome,
             premissa,
             postura,
-            oportunidadeId: op.id,
+            oportunidadeId: op?.id || null,
           });
 
-          op.cenarioId = cenario.id;
-          op.status = 'simulado';
-          op.posturaSugerida = postura;
-          saveToLocalStorage();
-          renderTodos();
+          if (op) {
+            op.cenarioId = cenario.id;
+            op.status = 'simulado';
+            op.posturaSugerida = postura;
+            if (window.saveToLocalStorage) window.saveToLocalStorage();
+            renderTodos();
+          }
 
           modal.remove();
           if (window.openCanvas) window.openCanvas(cenario.id);
