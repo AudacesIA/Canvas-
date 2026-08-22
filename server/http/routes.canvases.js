@@ -148,6 +148,21 @@ export function registerCanvasRoutes(router, { canvasService }) {
     sendJson(res, 201, { canvas: await canvasService.duplicateCanvas(clientId, canvasId) });
   });
 
+  /** Motor Multi-Agentes Merlin */
+  router.post('/api/clients/:clientId/canvases/:canvasId/merlin/simular', async (req, res, { clientId, canvasId }) => {
+    const { MerlinEngine } = await import('../agents/merlinEngine.js');
+    const body = await readJsonBody(req).catch(() => ({}));
+    const merlin = new MerlinEngine(canvasService);
+    const resultado = await merlin.simular({
+      clientId,
+      baseCanvasId: canvasId,
+      premissa: body.premissa || 'Otimização operacional e logística',
+      postura: body.postura || 'realista',
+      oportunidadeId: body.oportunidadeId || null,
+    });
+    sendJson(res, 201, resultado);
+  });
+
   /** Mover canvas entre clientes é copiar-e-apagar: são diretórios distintos. */
   router.post('/api/clients/:clientId/canvases/:canvasId/move', async (req, res, { clientId, canvasId }) => {
     const { toClientId } = await readJsonBody(req);

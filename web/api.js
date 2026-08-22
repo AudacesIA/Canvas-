@@ -83,6 +83,10 @@
       request('POST', `/api/clients/${clientId}/canvases/${canvasId}/cenarios`, {
         body: { nome, premissa, postura, oportunidadeId },
       }),
+    simularMerlin: (clientId, canvasId, { premissa, postura, oportunidadeId }) =>
+      request('POST', `/api/clients/${clientId}/canvases/${canvasId}/merlin/simular`, {
+        body: { premissa, postura, oportunidadeId },
+      }),
     listarCenarios: (clientId, canvasId) =>
       request('GET', `/api/clients/${clientId}/canvases/${canvasId}/cenarios`),
     compararCenario: (clientId, canvasId) =>

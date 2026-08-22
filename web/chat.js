@@ -1,12 +1,11 @@
 /**
- * Copilot de Simulação Operacional e Chat da Consultoria Audaces.
+ * MERLIN IA — Motor Multi-Agentes de Simulação & Consultoria Estratégica.
  */
 (function () {
   'use strict';
 
   let drawer = null;
   let isOpen = false;
-  const messages = [];
 
   function criarDrawer() {
     if (document.getElementById('chat-drawer')) return document.getElementById('chat-drawer');
@@ -17,9 +16,9 @@
     el.innerHTML = `
       <div class="chat-header">
         <div class="chat-title">
-          <i class="fa-solid fa-wand-magic-sparkles"></i>
-          <span>AUDACES COPILOT</span>
-          <span style="font-size:10px; font-weight:700; color:#60a5fa; background:rgba(59,130,246,0.15); padding:2px 6px; border-radius:4px;">SIMULAÇÃO</span>
+          <i class="fa-solid fa-wand-magic-sparkles" style="color:#60a5fa;"></i>
+          <span>MERLIN IA</span>
+          <span style="font-size:10px; font-weight:700; color:#60a5fa; background:rgba(59,130,246,0.15); padding:2px 6px; border-radius:4px;">MULTI-AGENTES</span>
         </div>
         <button class="agd-close" id="btn-close-chat">✕</button>
       </div>
@@ -28,23 +27,30 @@
         <!-- Mensagem de boas-vindas -->
         <div class="chat-bubble agent">
           <div class="markdown-body">
-            Olá, consultor! Estou pronto para simular cenários operacionais <strong>"E Se"</strong> a partir do mapeamento deste canvas.
+            Olá, consultor! Sou o <strong>Merlin</strong>, seu motor multi-agentes de simulação estratégica.
             <br><br>
-            Você pode pedir para criar um cenário alternativo, avaliar rotas, eliminar passagens manuais ou simular benchmarks externos.
+            Ao propor uma hipótese <strong>"E Se"</strong>, acionarei uma banca especializada de agentes:
+            <ul style="margin:6px 0 0 16px; font-size:11.5px; line-height:1.5;">
+              <li>⚙️ <strong>Engenheiro Lean:</strong> Mapeia desperdícios e tempos.</li>
+              <li>📐 <strong>Arquiteto MCP:</strong> Redesenha o fluxo e nós.</li>
+              <li>🛡️ <strong>Red Teamer:</strong> Procura falhas, riscos e SLAs.</li>
+              <li>📊 <strong>Financeiro:</strong> Calcula Score de Viabilidade e ROI.</li>
+              <li>🏆 <strong>Sintetizador:</strong> Gera o Dossiê Executivo em Markdown.</li>
+            </ul>
           </div>
         </div>
       </div>
 
       <div class="chat-quick-actions">
-        <button class="chat-quick-btn" data-action="rota">⚡ Rota Alternativa</button>
-        <button class="chat-quick-btn" data-action="handoffs">🤝 Eliminar Handoffs</button>
-        <button class="chat-quick-btn" data-action="robo">🤖 Braço Robótico / Automação</button>
-        <button class="chat-quick-btn" data-action="comparar">📊 Comparar Cenário</button>
+        <button class="chat-quick-btn" data-action="rota"><i class="fa-solid fa-truck"></i> Simular Hub 3PL</button>
+        <button class="chat-quick-btn" data-action="handoffs"><i class="fa-solid fa-arrows-split-up-and-left"></i> Cortar Handoffs</button>
+        <button class="chat-quick-btn" data-action="robo"><i class="fa-solid fa-robot"></i> Automação IA / Robótica</button>
+        <button class="chat-quick-btn" data-action="comparar"><i class="fa-solid fa-code-compare"></i> Comparar Cenário</button>
       </div>
 
       <div class="chat-input-container">
-        <textarea id="chat-input-text" class="chat-textarea" placeholder="Ex: E se dividirmos a frota entre BA e Sul terceirizado?"></textarea>
-        <button id="btn-send-chat" class="chat-send-btn"><i class="fa-solid fa-paper-plane"></i></button>
+        <textarea id="chat-input-text" class="chat-textarea" placeholder="Ex: E se descentralizarmos o estoque com operadores 3PL no Nordeste e Sul?"></textarea>
+        <button id="btn-send-chat" class="chat-send-btn" title="Simular com Banca Merlin"><i class="fa-solid fa-paper-plane"></i></button>
       </div>
     `;
 
@@ -89,13 +95,13 @@
 
       const act = btn.dataset.action;
       if (act === 'rota') {
-        input.value = 'Como a operação ficaria se criássemos uma rota alternativa dividindo a frota entre BA e Sul terceirizado?';
+        input.value = 'E se terceirizarmos o frete com centros de distribuição 3PL regionais?';
         enviar();
       } else if (act === 'handoffs') {
-        input.value = 'Identifique os principais gargalos de handoff e simule a eliminação das transferências manuais.';
+        input.value = 'Identifique os gargalos de handoff manual e simule a desburocratização das transferências.';
         enviar();
       } else if (act === 'robo') {
-        input.value = 'Simule um cenário exploratório de benchmark internacional substituindo o manuseio manual por automação de ponta.';
+        input.value = 'Simule um cenário exploratório substituindo o armazenamento e separação manual por automação de ponta.';
         enviar();
       } else if (act === 'comparar') {
         if (window.AudasysComparador && activeCanvasId) {
@@ -126,13 +132,13 @@
     const ops = (window.oportunidades || []);
     if (ops.length === 0) {
       quickEl.innerHTML = `
-        <button class="chat-quick-btn" data-action="rota"><i class="fa-solid fa-truck"></i> Simular Rota Alternativa</button>
+        <button class="chat-quick-btn" data-action="rota"><i class="fa-solid fa-truck"></i> Simular Hub 3PL</button>
         <button class="chat-quick-btn" data-action="handoffs"><i class="fa-solid fa-arrows-split-up-and-left"></i> Cortar Handoffs</button>
         <button class="chat-quick-btn" data-action="robo"><i class="fa-solid fa-robot"></i> Automação IA / Robótica</button>
       `;
       return;
     }
-    
+
     quickEl.innerHTML = `
       <div style="width:100%; font-size:10.5px; font-weight:700; color:#94a3b8; margin-bottom:4px; text-transform:uppercase; display:flex; align-items:center; gap:5px;">
         <i class="fa-solid fa-asterisk" style="color:#60a5fa;"></i> Oportunidades Mapeadas no Processo:
@@ -171,126 +177,110 @@
   async function processarMensagemUsuario(texto) {
     appendMessage('user', escapeHtml(texto));
 
-    appendMessage('agent', `<i class="fa-solid fa-spinner fa-spin"></i> Analisando estrutura do canvas e simulando hipótese...`);
+    appendMessage('agent', `
+      <div style="display:flex; align-items:center; gap:8px;">
+        <i class="fa-solid fa-spinner fa-spin" style="color:#60a5fa;"></i>
+        <span><strong>Merlin:</strong> Acionando banca multi-agentes para simular hipótese...</span>
+      </div>
+    `);
 
-    // Pequeno delay para processar simulação interativa
-    setTimeout(async () => {
+    const isCenario = !!(window.currentCanvasDerivadoDe);
+    const premissa = texto.length > 60 ? texto.slice(0, 60) + '...' : texto;
+
+    let postura = 'realista';
+    if (texto.toLowerCase().includes('robô') || texto.toLowerCase().includes('robo') || texto.toLowerCase().includes('ia') || texto.toLowerCase().includes('visão')) {
+      postura = 'exploratorio';
+    } else if (texto.toLowerCase().includes('otimista') || texto.toLowerCase().includes('eliminar tudo')) {
+      postura = 'otimista';
+    } else if (texto.toLowerCase().includes('pessimista') || texto.toLowerCase().includes('custo alto') || texto.toLowerCase().includes('risco')) {
+      postura = 'pessimista';
+    }
+
+    try {
+      const curClientId = window.activeClientId || (window.clientOfCanvas ? window.clientOfCanvas(window.activeCanvasId) : 'techwear-brasil');
+      const baseId = isCenario ? window.currentCanvasDerivadoDe.canvasId : window.activeCanvasId;
+
+      const res = await Audasys.api.simularMerlin(curClientId, baseId, {
+        premissa,
+        postura,
+      });
+
       const container = drawer.querySelector('#chat-messages-container');
       container.lastElementChild?.remove(); // remove spinner
 
-      const isCenario = !!(window.currentCanvasDerivadoDe);
-      const premissa = texto.length > 50 ? texto.slice(0, 50) + '...' : texto;
+      const cenario = res.cenario;
+      const score = res.scoreViabilidade || 85;
+      const selo = res.seloRecomendacao || 'QUICK WIN';
+      const logs = res.logsDeliberacao || [];
 
-      let postura = 'realista';
-      if (texto.toLowerCase().includes('robô') || texto.toLowerCase().includes('robo') || texto.toLowerCase().includes('ia') || texto.toLowerCase().includes('japão')) {
-        postura = 'exploratorio';
-      } else if (texto.toLowerCase().includes('otimista') || texto.toLowerCase().includes('eliminar tudo')) {
-        postura = 'otimista';
-      } else if (texto.toLowerCase().includes('pessimista') || texto.toLowerCase().includes('custo alto')) {
-        postura = 'pessimista';
-      }
-
-      try {
-        const curClientId = window.activeClientId || (window.clientOfCanvas ? window.clientOfCanvas(window.activeCanvasId) : 'cafe-vendas');
-        const baseId = isCenario ? window.currentCanvasDerivadoDe.canvasId : window.activeCanvasId;
-        const res = await Audasys.api.criarCenario(curClientId, baseId, {
-          premissa,
-          postura,
-          nome: `Simulação: ${premissa}`,
-        });
-
-        const novoCenario = res.canvas;
-
-        // Se houver nós no cenário, aplicamos alterações estruturais coerentes com a hipótese
-        if (novoCenario.nodes && novoCenario.nodes.length > 0) {
-          const nodesCopy = JSON.parse(JSON.stringify(novoCenario.nodes));
-          const connsCopy = JSON.parse(JSON.stringify(novoCenario.connections));
-
-          // Resolvemos gargalos existentes
-          nodesCopy.forEach((n) => {
-            if (n.bottleneck) {
-              n.bottleneck = '';
-              n.bottleneckCategory = '';
-              n.bottleneckCategories = [];
-            }
-          });
-
-          // Se a hipótese for rota/terceirização/divisão
-          if (texto.toLowerCase().includes('rota') || texto.toLowerCase().includes('sul') || texto.toLowerCase().includes('terceiriz')) {
-            const lastNode = nodesCopy[nodesCopy.length - 1];
-            const maxId = Math.max(...nodesCopy.map((n) => parseInt(n.id.replace(/\D/g, '')) || 0), 10);
-            const newNodeId = `node_${maxId + 1}`;
-            nodesCopy.push({
-              id: newNodeId,
-              type: 'action',
-              name: 'Expedição Terceirizada (Rota Sul)',
-              owner: 'Operador Logístico Parceiro',
-              tools: 'TMS Integrado',
-              area: 'geral',
-              x: (lastNode?.x || 500) - 100,
-              y: (lastNode?.y || 200) + 120,
-            });
-            if (lastNode) {
-              connsCopy.push({
-                id: `conn_sim_${Date.now()}`,
-                from: newNodeId,
-                to: lastNode.id,
-                label: 'Entrega confirmada',
-              });
-            }
-          } else if (postura === 'exploratorio') {
-            // Benchmark / Robô / IA
-            nodesCopy.forEach((n) => {
-              if (n.type === 'action') {
-                n.tools = (n.tools ? n.tools + ', ' : '') + 'Automação IA / Robótica';
-              }
-            });
-          }
-
-          // Salvamos o cenário transformado
-          await fetch(`/api/clients/${curClientId}/canvases/${novoCenario.id}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json', 'If-Match': String(novoCenario.rev) },
-            body: JSON.stringify({ nodes: nodesCopy, connections: connsCopy }),
-          });
-        }
-
-        // Buscamos o comparativo estrutural
-        let diffResumo = '';
-        try {
-          const compData = await Audasys.api.compararCenario(curClientId, novoCenario.id);
-          const est = compData.comparacao.estrutura;
-          diffResumo = `
-            <div style="margin: 10px 0; padding: 10px 12px; background: rgba(0,0,0,0.25); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; font-size: 12px;">
-              <div style="font-weight:700; color:#cbd5e1; margin-bottom:4px;"><i class="fa-solid fa-chart-simple"></i> Impacto Estrutural Calculado:</div>
-              <div>• <strong>Passos:</strong> ${est.passos.base} → ${est.passos.cenario} (${est.passos.delta >= 0 ? '+' : ''}${est.passos.delta})</div>
-              <div>• <strong>Handoffs:</strong> ${est.handoffs.base} → ${est.handoffs.cenario} (${est.handoffs.delta >= 0 ? '+' : ''}${est.handoffs.delta})</div>
-              <div>• <strong>Gargalos:</strong> ${est.gargalos.base} → ${est.gargalos.cenario} (${est.gargalos.delta >= 0 ? '+' : ''}${est.gargalos.delta})</div>
-            </div>`;
-        } catch (e) {
-          console.warn('Comparativo simplificado no chat indisponível:', e);
-        }
-
-        const htmlResposta = `
-          <strong>🎯 Simulação Gerada [Postura: ${postura.toUpperCase()}]:</strong>
-          <br><br>
-          Criamos o cenário <em>"${escapeHtml(novoCenario.name)}"</em> derivado da operação real.
-          <br><br>
-          <strong>Premissa testada:</strong> "${escapeHtml(premissa)}"
-          ${diffResumo}
-          <div style="display:flex; gap:8px; margin-top:8px;">
-            <button class="arb-btn primary" data-chat-abrir-cenario="${novoCenario.id}"><i class="fa-solid fa-arrow-up-right-from-square"></i> Abrir Cenário</button>
-            <button class="arb-btn" data-chat-comparar-cenario="${novoCenario.id}"><i class="fa-solid fa-code-compare"></i> Comparar Detalhes</button>
+      let logsHtml = '';
+      if (logs.length > 0) {
+        logsHtml = `
+          <div style="margin: 8px 0; padding: 8px; background: rgba(15,23,42,0.6); border: 1px solid rgba(255,255,255,0.08); border-radius: 6px; font-size: 11px;">
+            <div style="font-weight:700; color:#94a3b8; margin-bottom:4px; text-transform:uppercase; font-size:10px;">
+              <i class="fa-solid fa-users-gear" style="color:#60a5fa;"></i> Deliberação da Banca Merlin:
+            </div>
+            ${logs.map(l => `
+              <div style="margin-bottom:3px; color:#cbd5e1;">
+                <strong style="color:#60a5fa;">[${escapeHtml(l.agente)}]:</strong> ${escapeHtml(l.acao)}
+              </div>
+            `).join('')}
           </div>
         `;
-        appendMessage('agent', htmlResposta);
-      } catch (err) {
-        appendMessage('agent', `Falha ao processar simulação: ${escapeHtml(err.message)}`);
       }
-    }, 600);
+
+      const respostaHtml = `
+        <div style="margin-bottom:6px;">
+          <strong>🎯 Cenário Simulado com Sucesso!</strong><br>
+          <span style="font-size:11.5px; color:#94a3b8;">Premissa: "${escapeHtml(premissa)}" [${postura.toUpperCase()}]</span>
+        </div>
+        ${logsHtml}
+        <div style="display:flex; align-items:center; gap:8px; margin: 8px 0;">
+          <span style="font-size:11px; font-weight:800; color:#38bdf8; background:rgba(56,189,248,0.15); border:1px solid rgba(56,189,248,0.3); padding:3px 8px; border-radius:5px;">
+            <i class="fa-solid fa-chart-line"></i> SCORE: ${score}/100
+          </span>
+          <span style="font-size:11px; font-weight:700; color:#10b981; background:rgba(16,185,129,0.15); border:1px solid rgba(16,185,129,0.3); padding:3px 8px; border-radius:5px;">
+            <i class="fa-solid fa-check-double"></i> ${escapeHtml(selo)}
+          </span>
+        </div>
+        <div style="display:flex; gap:8px; margin-top:10px; flex-wrap:wrap;">
+          <button class="chat-quick-btn highlight-btn" data-chat-abrir-cenario="${cenario.id}" style="background:#2563eb; color:#fff; border-color:#3b82f6;">
+            <i class="fa-solid fa-arrow-up-right-from-square"></i> Abrir Cenário no Canvas
+          </button>
+          <button class="chat-quick-btn" data-chat-comparar-cenario="${cenario.id}">
+            <i class="fa-solid fa-code-compare"></i> Comparar Dossiê
+          </button>
+        </div>
+      `;
+
+      appendMessage('agent', respostaHtml);
+
+      // Atualiza badge de cenários no topo
+      if (window.Audasys?.api && activeClientId && activeCanvasId) {
+        window.Audasys.api.listarCenarios(activeClientId, activeCanvasId).then(({ cenarios }) => {
+          const badgeCount = document.getElementById('cenarios-count-badge');
+          if (badgeCount) {
+            badgeCount.textContent = cenarios.length;
+            badgeCount.style.display = cenarios.length > 0 ? 'inline-block' : 'none';
+          }
+        }).catch(() => {});
+      }
+    } catch (err) {
+      const container = drawer.querySelector('#chat-messages-container');
+      container.lastElementChild?.remove();
+      appendMessage('agent', `❌ <strong style="color:#ef4444;">Erro ao acionar a banca Merlin:</strong> ${escapeHtml(err.message || 'Falha na deliberação multi-agentes.')}`);
+    }
   }
 
-  document.getElementById('btn-chat-toggle')?.addEventListener('click', toggleChat);
+  function escapeHtml(str) {
+    if (!str) return '';
+    return String(str).replace(/[&<>"']/g, (m) => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+    }[m]));
+  }
 
-  window.AudasysChat = { toggleChat, processarMensagemUsuario };
+  window.AudasysChat = {
+    toggleChat,
+    processarMensagemUsuario,
+  };
 })();
