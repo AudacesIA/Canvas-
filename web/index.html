@@ -36,15 +36,11 @@
     
     <div class="header-filter" id="header-filter">
       <label for="filter-dept"><i class="fa-solid fa-filter"></i> Área:</label>
+      <!-- Preenchido por loadVocabulary() com o vocabulário DESTA empresa. A lista
+           fixa que existia aqui não tinha logística, suporte, atendimento nem
+           compras — as áreas que o primeiro mapa real precisou. -->
       <select id="filter-dept">
         <option value="all">Todas as Áreas</option>
-        <option value="geral">Geral</option>
-        <option value="marketing">Marketing</option>
-        <option value="comercial">Comercial</option>
-        <option value="operacoes">Operações</option>
-        <option value="financeiro">Financeiro</option>
-        <option value="rh">RH</option>
-        <option value="administrativo">Administrativo</option>
       </select>
     </div>
     
@@ -63,7 +59,7 @@
       <button id="btn-oportunidades" class="header-btn" title="Oportunidades de receita mapeadas no canvas"><i class="fa-solid fa-asterisk"></i> Oportunidades</button>
       <button id="btn-organizar" class="header-btn" title="Reposicionar os blocos em camadas, da esquerda para a direita"><i class="fa-solid fa-wand-magic"></i> Organizar</button>
       <button id="btn-clear" class="header-btn danger-btn" title="Limpar todo o quadro"><i class="fa-solid fa-trash-can"></i> Limpar</button>
-      <button id="btn-audit" class="audit-btn"><span class="audit-btn-inner"><i class="fa-solid fa-wand-magic-sparkles"></i> Auditoria de IA</span></button>
+      <button id="btn-audit" class="audit-btn" title="Auditoria de IA"><span class="audit-btn-inner"><i class="fa-solid fa-wand-magic-sparkles"></i> Auditoria de IA</span></button>
     </div>
   </header>
 

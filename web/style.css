@@ -306,7 +306,6 @@ body {
 
 .trigger-color { background: rgba(16, 185, 129, 0.15); border: 1px solid var(--accent-emerald); color: var(--accent-emerald); }
 .action-color { background: rgba(59, 130, 246, 0.15); border: 1px solid var(--accent); color: var(--accent-glow); }
-.integration-color { background: rgba(168, 85, 247, 0.15); border: 1px solid var(--accent-purple); color: #c084fc; }
 .condition-color { background: rgba(245, 158, 11, 0.15); border: 1px solid var(--accent-amber); color: var(--accent-amber); }
 .output-color { background: rgba(244, 63, 94, 0.15); border: 1px solid var(--accent-rose); color: var(--accent-rose); }
 
@@ -1838,18 +1837,6 @@ body {
 }
 .rule-sub-btn:hover { color: var(--accent-glow); background: rgba(96,165,250,0.1); }
 .rule-del-btn:hover { color: var(--accent-rose); background: rgba(244,63,94,0.08); }
-.rule-label-static {
-  font-size: 11px;
-  color: var(--text-muted);
-  font-style: italic;
-}
-.rules-else-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 5px 4px;
-  margin-bottom: 8px;
-}
 .add-rule-btn {
   width: 100%;
   padding: 6px 10px;
@@ -2325,16 +2312,6 @@ body {
   border-color: var(--glass-border-hover) !important;
 }
 
-.home-canvas-name-badge {
-  font-family: 'Outfit', sans-serif;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-secondary);
-  padding: 4px 10px;
-  background: rgba(255,255,255,0.04);
-  border: 1px solid var(--glass-border);
-  border-radius: 6px;
-}
 
 /* ══════════════════════════════════════════════════════════════════════════
    PROPOSTA DO AGENTE
@@ -2666,7 +2643,6 @@ input.ev-meio, textarea.ev-meio, select.ev-meio { color: #c2c9d6; }
   border: 2px solid var(--accent-amber, #f59e0b);
 }
 .bp:hover { transform: scale(1.25); box-shadow: 0 0 10px rgba(245, 158, 11, 0.55); }
-.bp-sel { box-shadow: 0 0 0 4px rgba(245, 158, 11, 0.22); }
 
 /* O ANEL. Esta é a informação mais importante do mapa de medição: aberto
    significa que alguém coleta o número e ele não chega em ninguém que possa
@@ -2724,20 +2700,6 @@ input.ev-meio, textarea.ev-meio, select.ev-meio { color: #c2c9d6; }
 .bp-alerta { color: #f87171; }
 
 /* Botão flutuante que aparece na aresta selecionada — medir a PASSAGEM. */
-.bp-criar-aresta {
-  position: absolute;
-  transform: translateX(-50%);
-  pointer-events: auto;
-  cursor: pointer;
-  white-space: nowrap;
-  padding: 3px 9px;
-  border-radius: 999px;
-  font-size: 10px;
-  color: #fcd34d;
-  background: rgba(245, 158, 11, 0.14);
-  border: 1px dashed rgba(245, 158, 11, 0.5);
-}
-.bp-criar-aresta:hover { background: rgba(245, 158, 11, 0.28); }
 
 /* Lista de medições no painel do nó. */
 .med-item {
@@ -2991,4 +2953,45 @@ input.ev-meio, textarea.ev-meio, select.ev-meio { color: #c2c9d6; }
 .canvas-card-premissa {
   font-size: 10.5px; color: #94a3b8; line-height: 1.45; margin-top: 4px;
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+
+/* ═══ Telas estreitas ═══════════════════════════════════════════════════════
+   Não é suporte a celular — ninguém mapeia um processo no telefone, e fingir
+   que sim custaria mais do que entrega. É o mínimo verificável: que nenhum
+   controle fique inalcançável num laptop.
+
+   Medido antes de escrever isto: em 1280×800 — a resolução padrão de um
+   MacBook Air 13" — o header transbordava 109px e o botão de Auditoria ficava
+   FORA DA TELA, sem scroll que o alcançasse. Em 1024, quatro botões. Um botão
+   que não dá para clicar é pior que um ausente: o usuário sabe que existe. */
+
+/* O header nunca empurra ação para fora: ele encolhe. */
+.app-header { gap: 12px; }
+.header-actions { flex-shrink: 1; min-width: 0; flex-wrap: nowrap; }
+.header-logo { flex-shrink: 0; }
+
+@media (max-width: 1440px) {
+  :root { --properties-width: 340px; --sidebar-width: 250px; }
+  .header-actions { gap: 8px; }
+  .header-btn { padding: 8px 12px; }
+}
+
+/* Rótulos viram ícones. `font-size: 0` apaga o texto solto do botão sem exigir
+   um <span> em volta dele; o ícone recupera o tamanho logo abaixo. Todo botão
+   do header tem `title`, então o nome continua a um hover de distância. */
+@media (max-width: 1250px) {
+  :root { --properties-width: 320px; --sidebar-width: 230px; }
+  .header-actions .header-btn,
+  .header-actions .audit-btn .audit-btn-inner { font-size: 0; gap: 0; }
+  .header-actions .header-btn { padding: 8px 11px; }
+  .header-actions .header-btn i,
+  .header-actions .audit-btn .audit-btn-inner i { font-size: 14px; }
+  .logo-separator, .logo-subtext { display: none; }
+}
+
+@media (max-width: 1050px) {
+  :root { --properties-width: 300px; --sidebar-width: 210px; }
+  .header-filter label { font-size: 0; }
+  .header-filter label i { font-size: 13px; }
+  .app-header { padding: 0 12px; }
 }

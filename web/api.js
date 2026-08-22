@@ -99,6 +99,7 @@
     pending: null,     // último snapshot ainda não gravado
     timer: null,
     inFlight: false,
+    emVoo: null,          // promessa da requisição em curso
     dirtySinceFlight: false,
     listeners: new Set(),
   };
@@ -124,7 +125,28 @@
     try { return JSON.parse(localStorage.getItem(MIRROR_PREFIX + canvasId) || 'null'); } catch { return null; }
   }
 
+  /**
+   * Descarrega o que está pendente e SÓ RESOLVE quando o disco tem o dado.
+   *
+   * `flushOnce` é o passo; `flush` é a garantia. A diferença não é estilo: com
+   * uma escrita já em voo, o passo apenas remarca a fila e volta na hora — e
+   * quem escreveu `await flush()` seguia acreditando que tinha gravado.
+   *
+   * O caso real: o consultor escreve a oportunidade e clica "gerar cenário" no
+   * segundo seguinte. O fork lê o canvas EM DISCO; se o autosave ainda estava
+   * a caminho, o servidor recusa com "não existe oportunidade" — um erro que
+   * não se reproduz quando se testa devagar, e que sempre acontece na reunião.
+   */
   async function flush() {
+    for (let i = 0; i < 12; i++) {
+      await flushOnce();
+      if (!session.pending && !session.inFlight) return;
+      if (session.inFlight) await session.emVoo;   // espera a que já estava a caminho
+    }
+    console.warn('[persistência] flush não convergiu — a fila continua se realimentando');
+  }
+
+  async function flushOnce() {
     if (session.timer) { clearTimeout(session.timer); session.timer = null; }
     if (!session.pending || !session.canvasId) return;
     if (session.inFlight) { session.dirtySinceFlight = true; return; }
@@ -133,6 +155,10 @@
     session.pending = null;
     session.inFlight = true;
     emit('saving');
+
+    // Promessa da requisição em curso, para o `flush` ter o que aguardar.
+    let concluir;
+    session.emVoo = new Promise((r) => { concluir = r; });
 
     try {
       const out = await api.putCanvas(session.clientId, session.canvasId, data, session.rev);
@@ -152,6 +178,7 @@
       }
     } finally {
       session.inFlight = false;
+      concluir();
       if (session.dirtySinceFlight || session.pending) {
         session.dirtySinceFlight = false;
         schedule();
@@ -161,7 +188,7 @@
 
   function schedule() {
     if (session.timer) clearTimeout(session.timer);
-    session.timer = setTimeout(flush, SAVE_DEBOUNCE_MS);
+    session.timer = setTimeout(flushOnce, SAVE_DEBOUNCE_MS);
   }
 
   const persistence = {

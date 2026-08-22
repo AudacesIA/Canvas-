@@ -1,0 +1,143 @@
+<!doctype html>
+<!--
+  Roteiro de Q&A da interface.
+
+  O e2e cobre o caminho agente→SSE→aceite→disco. Este cobre o que o consultor
+  toca: paleta, menu da aresta, formulário de gargalo, asterisco, mostrador,
+  exportação e limpeza. Nasceu de uma varredura que achou três coisas que
+  nenhuma suíte pegava — categoria Lean sem etiqueta, `flush()` que retornava
+  antes de gravar, e botão fora da tela em 1280px.
+
+  Rodar:
+    AUDASYS_TEST=1 npm start
+    chrome --headless=new http://127.0.0.1:8787/scripts/qa.html
+    # resultado em /tmp/audasys-e2e-report.json
+-->
+<title>qa</title><body><pre id="o">…</pre>
+<iframe id="f" src="/" style="position:fixed;left:-4000px;width:1500px;height:950px"></iframe>
+<script>
+const R=[],erros=[];
+const ck=(n,p,d)=>R.push((p?'OK   ':'FALHA')+' '+n+(d?'  ('+d+')':''));
+window.addEventListener('error',e=>erros.push(e.message));
+const until=async(f,ms=9000)=>{const t=Date.now();while(Date.now()-t<ms){try{if(await f())return true;}catch{}await new Promise(r=>setTimeout(r,110));}return false;};
+const api=async(m,p,b)=>{const r=await fetch(p,{method:m,headers:{'Content-Type':'application/json'},body:b?JSON.stringify(b):undefined});const j=await r.json().catch(()=>({}));if(!r.ok)throw new Error(j.error||r.status);return j;};
+(async()=>{
+let cid;
+try{
+ const {client}=await api('POST','/api/clients',{name:'ZZ QA Roteiro'}); cid=client.id;
+ const {canvas}=await api('POST',`/api/clients/${cid}/canvases`,{name:'Café'});
+ const DOC={nodes:[
+   {id:'n1',name:'Embalar',type:'action',owner:'Fábrica',x:80,y:200},
+   {id:'n2',name:'Coletar',type:'action',owner:'Transportadora',x:420,y:200}],
+  connections:[{id:'cQA',from:'n1',to:'n2',label:'',ruleId:'',gargalo:{texto:'',categorias:[]}}],
+  oportunidades:[],breakpoints:[],notes:[]};
+ await api('PUT',`/api/clients/${cid}/canvases/${canvas.id}`,DOC);
+
+ const f=document.getElementById('f'), W=f.contentWindow, D=()=>f.contentDocument;
+ await until(()=>D().readyState==='complete'&&typeof W.openCanvas==='function');
+ W.activeClientId=cid;
+ await W.openCanvas(canvas.id);
+ await until(()=>D().querySelectorAll('.canvas-node').length===2);
+ ck('canvas abre com nós e aresta',
+    D().querySelectorAll('.canvas-node').length===2 && D().getElementById('cQA'));
+
+ // ── 1. Paleta ────────────────────────────────────────────────────────────
+ ck('paleta expõe exatamente os 5 tipos do servidor',
+    D().querySelectorAll('[data-node-type]').length===5,
+    [...D().querySelectorAll('[data-node-type]')].map(e=>e.dataset.nodeType).join(','));
+
+ // ── 2. Taxonomia Lean: toda categoria rende etiqueta ─────────────────────
+ const voc=await api('GET',`/api/clients/${cid}/vocabulary`);
+ const semRotulo=[],rotulos={};
+ for(const c of voc.wasteCategories){
+   const doc=JSON.parse(JSON.stringify(DOC));
+   doc.nodes[1].bottleneck='trava aqui';
+   doc.nodes[1].bottleneckCategory=c.id; doc.nodes[1].bottleneckCategories=[c.id];
+   W.applyCanvasState(doc,{source:'open',persist:false});
+   await until(()=>D().querySelector('#n2 .node-failure-preview'));
+   const tag=D().querySelector('#n2 .lean-cat-tag');
+   const t=tag?tag.textContent.trim():'';
+   rotulos[c.id]=t;
+   if(!t) semRotulo.push(c.id);
+ }
+ ck('TODA categoria Lean rende etiqueta no card', semRotulo.length===0,
+    semRotulo.length?'sem etiqueta: '+semRotulo.join(', '):voc.wasteCategories.length+' categorias');
+ const divergentes=voc.wasteCategories.filter(c=>rotulos[c.id]&&rotulos[c.id]!==c.label);
+ ck('rótulo do card bate com o do servidor', divergentes.length===0,
+    divergentes.map(c=>`${c.id}: "${rotulos[c.id]}"≠"${c.label}"`).join(' | '));
+
+ // ── 3. Menu da aresta ────────────────────────────────────────────────────
+ W.applyCanvasState(JSON.parse(JSON.stringify(DOC)),{source:'open',persist:false});
+ await until(()=>D().getElementById('cQA'));
+ W.selectConnection('cQA');
+ ck('clique na aresta abre menu', await until(()=>D().querySelector('.card-context-menu')));
+ const acoes=[...D().querySelectorAll('.card-context-menu button')].map(b=>b.dataset.acao).filter(Boolean);
+ ck('menu oferece medir, gargalo e rótulo',
+    ['medicao','gargalo','rotulo'].some(a=>acoes.includes(a)), acoes.join(',')||'(sem data-acao)');
+
+ // formulário de gargalo usa o vocabulário do servidor
+ const btnG=[...D().querySelectorAll('.card-context-menu button')].find(b=>/gargalo/i.test(b.textContent));
+ btnG?.click();
+ await until(()=>D().querySelector('.garg-cats'));
+ const chips=[...D().querySelectorAll('.garg-cats .garg-cat input')].map(e=>e.value);
+ ck('form de gargalo usa o vocabulário do servidor (não lista fixa)',
+    chips.length===voc.wasteCategories.length && chips.every(c=>voc.wasteCategories.some(v=>v.id===c)),
+    `${chips.length} chips / ${voc.wasteCategories.length} categorias`);
+
+ // ── 4. Oportunidade ──────────────────────────────────────────────────────
+ D().querySelector('#edge-gargalo-form [data-fechar-garg]')?.click();
+ const conn=W.serializeCanvas().connections[0];
+ W.AudasysOportunidades.novaNaAresta(conn);
+ await until(()=>D().getElementById('op-notepad'));
+ D().getElementById('op-np-titulo').value='Expandir frota';
+ D().getElementById('op-np-texto').value='## Dinheiro\n79 pedidos/mês';
+ D().querySelector('[data-salvar-np]').click();
+ await until(()=>W.serializeCanvas().oportunidades.length===1);
+ ck('oportunidade criada pela passagem', W.serializeCanvas().oportunidades.length===1);
+ ck('asterisco aparece', await until(()=>D().querySelector('.op-asterisco')));
+ // novaNaAresta já abre a passagem: o card nasce visível, sem exigir clique.
+ ck('card nasce visível junto com a oportunidade', await until(()=>D().querySelector('.op-card')));
+ ck('seta liga asterisco ao card', Boolean(D().querySelector('.op-seta')));
+ D().querySelector('.op-asterisco').click();
+ ck('clique no asterisco esconde os cards', await until(()=>!D().querySelector('.op-card')));
+ D().querySelector('.op-asterisco').click();
+ ck('clique de novo revela os cards', await until(()=>D().querySelector('.op-card')));
+
+ // ── 5. Cenário + mostrador ───────────────────────────────────────────────
+ await W.Audasys.persistence.flush();
+ const opId=W.serializeCanvas().oportunidades[0].id;
+ const {canvas:cen}=await api('POST',`/api/clients/${cid}/canvases/${canvas.id}/cenarios`,
+   {premissa:'frota dividida entre MG e Sul',oportunidadeId:opId});
+ ck('cenário nasce ligado à oportunidade', cen.derivadoDe.oportunidadeId===opId);
+ D().getElementById('btn-oportunidades').click();
+ await until(()=>D().querySelector('#op-lista-overlay .op-selo'));
+ ck('mostrador mostra o cenário no selo', D().querySelectorAll('.op-selo-tem').length===1);
+ const sub=D().querySelector('#op-lista-overlay .agd-sub')?.textContent.trim();
+ ck('contagem do mostrador não diverge', /1 oportunidade\(s\) · 1 com cenário/.test(sub||''), sub);
+ D().querySelector('[data-fechar-lista]').click();
+
+ // ── 6. Entregáveis ───────────────────────────────────────────────────────
+ const mapa=await api('POST',`/api/clients/${cid}/canvases/${canvas.id}/docs/mapa`);
+ ck('mapa.md gerado', mapa.bytes>0 && mapa.texto.includes('Expandir frota'));
+
+ // ── 7. Export e limpeza ──────────────────────────────────────────────────
+ const ser=W.serializeCanvas();
+ ck('export completo (com breakpoints e oportunidades)',
+    'breakpoints' in ser && 'oportunidades' in ser && ser.oportunidades.length===1);
+ W.clearAllBoard();
+ const pos=W.serializeCanvas();
+ ck('limpar zera medições e oportunidades também',
+    pos.oportunidades.length===0 && pos.breakpoints.length===0,
+    `op=${pos.oportunidades.length} bp=${pos.breakpoints.length}`);
+ ck('asterisco some com a limpeza', !D().querySelector('.op-asterisco'));
+
+ ck('nenhum erro de JS no console', erros.length===0, erros.slice(0,3).join(' | '));
+}catch(e){ ck('roteiro sem exceção', false, e.message+' @ '+(e.stack||'').split('\n')[1]); }
+if(cid){try{await api('DELETE','/api/clients/'+cid);}catch{}}
+const bad=R.filter(r=>r.startsWith('FALHA')).length;
+const text=R.join('\n')+`\n\n${R.length-bad}/${R.length} passaram`;
+document.getElementById('o').textContent=text; document.title=bad?`FALHOU(${bad})`:'TUDO-OK';
+await fetch('/api/_test-report',{method:'POST',headers:{'Content-Type':'application/json'},
+ body:JSON.stringify({verdict:bad?`FALHOU(${bad})`:'TUDO-OK',failed:bad,total:R.length,text})}).catch(()=>{});
+})();
+</script></body>

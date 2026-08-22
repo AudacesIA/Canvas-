@@ -318,6 +318,34 @@ cobre procedência, métricas tipadas, layout, `validate_canvas` e subprocesso.
 O Chrome headless não encerra sozinho ao terminar; o resultado sai em
 `/tmp/audasys-e2e-report.json` e no log do daemon antes disso.
 
+## Roteiro de Q&A da interface
+
+```bash
+AUDASYS_TEST=1 npm start
+"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --headless=new \
+  http://127.0.0.1:8787/scripts/qa.html
+```
+
+O e2e cobre o caminho do agente; este cobre o que o consultor toca — paleta, menu
+da aresta, formulário de gargalo, asterisco, mostrador, exportação, limpeza.
+**21 verificações.**
+
+Achou três coisas que nenhuma suíte pegava: categoria Lean que não rendia
+etiqueta, `flush()` que retornava antes de gravar, e botão fora da tela.
+
+## Responsividade
+
+```bash
+"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --headless=new \
+  --window-size=1920,1080 http://127.0.0.1:8787/scripts/responsivo.html
+```
+
+Mede overflow horizontal e botões inalcançáveis em seis larguras. Não há suporte
+a celular e não é para haver — ninguém mapeia processo no telefone. O que o
+arquivo garante é que **nenhum controle fique fora da tela num laptop**: em
+1280×800 o header transbordava 109px e a Auditoria de IA era impossível de
+clicar. Abaixo de 1250px os rótulos viram ícones; o `title` mantém o nome.
+
 ## Teste de fumaça
 
 ```bash
