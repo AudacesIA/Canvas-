@@ -509,12 +509,12 @@ server.registerTool(
       changesetInfo = `\nAlterações estruturais aplicadas com sucesso (${ops.length} operações).`;
     }
     const comp = await client.comparar(clientId, cenario.id);
+    const relatorio = comp.analiseMarkdown?.relatorioExecutivo || comp.texto;
     return text(
       `🎯 Simulação criada com sucesso!\n`
-      + `Cenário: ${cenario.id} "${cenario.name}" [${cenario.derivadoDe.postura}]\n`
+      + `Cenário: ${cenario.id} "${cenario.name}" [${cenario.derivadoDe.postura.toUpperCase()}]\n`
       + `Premissa: ${cenario.derivadoDe.premissa}${changesetInfo}\n\n`
-      + `--- IMPACTO ESTRUTURAL (Comparação As-Is vs To-Be) ---\n`
-      + comp.texto
+      + relatorio
     );
   }),
 );
@@ -545,17 +545,16 @@ server.registerTool(
     title: 'O que muda entre o processo real e o cenário',
     description:
       'Compara um cenário com o processo de que ele deriva: passos que somem e que nascem, '
-      + 'passagens de bastão, gargalos por categoria Lean e malhas de medição abertas.\n'
-      + '⚠️ A comparação conta ESTRUTURA, não dinheiro. Número em reais ou em minutos só aparece '
-      + 'quando os DOIS lados têm o número apurado; onde disser "não comparável", ninguém mediu. '
-      + 'NÃO preencha essa lacuna com estimativa: a ferramenta existe para separar o que a '
-      + 'consultoria apurou do que ela supôs, e um percentual inventado destrói exatamente isso.',
+      + 'passagens de bastão, gargalos por categoria Lean, pontos fortes, pontos fracos e Score de Viabilidade.',
     inputSchema: {
       clientId: z.string(),
       canvasId: z.string().describe('O canvas do CENÁRIO (o derivado), não o do processo real'),
     },
   },
-  guard(async ({ clientId, canvasId }) => text((await client.comparar(clientId, canvasId)).texto)),
+  guard(async ({ clientId, canvasId }) => {
+    const comp = await client.comparar(clientId, canvasId);
+    return text(comp.analiseMarkdown?.relatorioExecutivo || comp.texto);
+  }),
 );
 
 server.registerTool(

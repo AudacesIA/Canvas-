@@ -115,7 +115,7 @@ export function registerCanvasRoutes(router, { canvasService }) {
         + 'Compare a partir do canvas derivado, não do processo real.');
     }
     const base = await canvasService.getCanvas(clientId, cenario.derivadoDe.canvasId);
-    const client = await canvasService.getClient(clientId).catch(() => null);
+    const client = await canvasService.storage.readClient(clientId).catch(() => null);
     const analiseMarkdown = compararProcessosMarkdown(base, cenario, { clienteNome: client?.name || clientId });
     
     sendJson(res, 200, {
@@ -128,7 +128,7 @@ export function registerCanvasRoutes(router, { canvasService }) {
   router.get('/api/clients/:clientId/canvases/:canvasId/markdown', async (req, res, { clientId, canvasId }) => {
     const { canvasParaMarkdown } = await import('../core/processoMarkdown.js');
     const canvas = await canvasService.getCanvas(clientId, canvasId);
-    const client = await canvasService.getClient(clientId).catch(() => null);
+    const client = await canvasService.storage.readClient(clientId).catch(() => null);
     const markdown = canvasParaMarkdown(canvas, { clienteNome: client?.name || clientId });
     sendJson(res, 200, { markdown, canvasId, name: canvas.name });
   });

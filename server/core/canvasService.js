@@ -164,7 +164,7 @@ export class CanvasService {
     }
 
     // Gera o fluxo transformado com base no mapa de processos original e na premissa
-    const transformado = gerarFluxoCenario(base, { premissa, postura });
+    const transformado = gerarFluxoCenario(base, { premissa, postura, oportunidadeId });
     const seed = {
       ...strip(base),
       nodes: transformado.nodes,
@@ -180,6 +180,10 @@ export class CanvasService {
         premissa: String(premissa).trim(),
         postura,
         oportunidadeId: oportunidadeId ? String(oportunidadeId) : null,
+        comparativoTexto: transformado.comparativoTexto,
+        nosRemovidos: transformado.nosRemovidos,
+        nosSubstituidos: transformado.nosSubstituidos,
+        nosAdicionados: transformado.nosAdicionados,
       },
     });
 

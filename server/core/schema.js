@@ -436,6 +436,10 @@ export function hydrateDerivadoDe(raw) {
     premissa: String(raw.premissa ?? ''),
     postura: oneOf(raw.postura, POSTURAS, 'realista'),
     oportunidadeId: raw.oportunidadeId ? String(raw.oportunidadeId) : null,
+    comparativoTexto: String(raw.comparativoTexto ?? ''),
+    nosRemovidos: Array.isArray(raw.nosRemovidos) ? raw.nosRemovidos : [],
+    nosSubstituidos: Array.isArray(raw.nosSubstituidos) ? raw.nosSubstituidos : [],
+    nosAdicionados: Array.isArray(raw.nosAdicionados) ? raw.nosAdicionados : [],
     criadoEm: raw.criadoEm ?? new Date().toISOString(),
   };
 }
