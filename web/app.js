@@ -42,6 +42,7 @@ let nextNoteId = 1;
 let activeNoteId = null;
 let activeNoteStartPos = { x: 0, y: 0 };
 const NOTE_COLORS = {
+  blue: '#3b82f6',
   amber: 'var(--accent-amber)',
   rose: 'var(--accent-rose)',
   emerald: 'var(--accent-emerald)',
@@ -415,7 +416,7 @@ function createNote(x, y, customData = {}) {
 
 function renderNoteDOM(note) {
   const el = document.createElement('div');
-  el.className = 'sticky-note';
+  el.className = 'sticky-note' + (note.color === 'blue' || (note.text && note.text.includes('#')) ? ' sticky-note-blue-comparativo' : '');
   el.id = note.id;
   el.style.left = `${note.x}px`;
   el.style.top = `${note.y}px`;
@@ -473,6 +474,9 @@ function deleteNote(noteId) {
   if (el) el.remove();
   saveToLocalStorage();
 }
+
+window.createNote = createNote;
+window.deleteNote = deleteNote;
 
 function translateFrequency(freq) {
   const dict = {

@@ -124,13 +124,48 @@
           </div>
         </div>
 
-        <!-- Parecer Executivo -->
-        <div style="margin: 16px 0; padding: 14px 16px; background: rgba(59,130,246,0.08); border: 1px solid rgba(59,130,246,0.25); border-radius: 10px;">
-          <div style="font-weight:700; color:#93c5fd; margin-bottom:4px; font-size:13px;"><i class="fa-solid fa-lightbulb"></i> Parecer Estratégico da Consultoria:</div>
-          <div style="font-size:13px; color:#e2e8f0; line-height:1.5;">${escapeHtml(analise.parecerConsultoria || 'Cenário viável com ganhos estruturais imediatos.')}</div>
+        <!-- STICKY NOTE EXECUTIVO AZUL (MARKDOWN IA) -->
+        <div class="comp-sticky-note-azul" style="margin: 16px 0; background: linear-gradient(135deg, rgba(15,23,42,0.95), rgba(30,58,138,0.35)); border: 1.5px solid rgba(59,130,246,0.45); border-radius: 12px; padding: 16px; box-shadow: 0 8px 32px rgba(0,0,0,0.5), 0 0 20px rgba(59,130,246,0.2); position:relative;">
+          <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid rgba(59,130,246,0.3); padding-bottom:10px; margin-bottom:12px; flex-wrap:wrap; gap:8px;">
+            <div style="display:flex; align-items:center; gap:8px;">
+              <i class="fa-solid fa-note-sticky" style="color:#60a5fa; font-size:16px;"></i>
+              <span style="font-weight:700; color:#93c5fd; font-size:13px; text-transform:uppercase; letter-spacing:0.5px;">Sticky Note de Comparação (Real vs Cenário)</span>
+              <span style="font-size:10px; font-weight:700; color:#38bdf8; background:rgba(56,189,248,0.15); padding:2px 6px; border-radius:4px;">GERADO POR IA</span>
+            </div>
+            <div style="display:flex; gap:8px;">
+              <button class="header-btn" id="btn-fixar-sticky-canvas" style="background:#2563eb; color:#fff; border-color:#3b82f6; font-size:11.5px; padding:4px 10px;" title="Fixar este sticky note azul diretamente no Canvas"><i class="fa-solid fa-thumbtack"></i> Fixar no Canvas</button>
+              <button class="header-btn" id="btn-copiar-sticky-md" style="font-size:11.5px; padding:4px 10px;" title="Copiar texto do sticky note"><i class="fa-solid fa-copy"></i> Copiar</button>
+            </div>
+          </div>
+
+          <div style="font-family: 'DM Sans', sans-serif; font-size:12.5px; line-height:1.6; color:#cbd5e1; max-height:280px; overflow-y:auto; padding-right:6px;">
+            <div style="margin-bottom:8px; font-weight:700; color:#60a5fa; font-size:13px;">
+              📌 Parecer Estratégico da Consultoria:
+            </div>
+            <p style="margin-bottom:12px; color:#e2e8f0;">${escapeHtml(analise.parecerConsultoria || 'Otimização com destravamento de gargalos e redução de despesas fixas.')}</p>
+            
+            <div style="margin-bottom:6px; font-weight:700; color:#34d399; font-size:12.5px;">
+              💪 Principais Pontos Fortes (Ganhos):
+            </div>
+            <ul style="margin:0 0 12px 18px; padding:0;">
+              ${(analise.pontosPositivos || []).map(p => `<li style="margin-bottom:4px;"><strong style="color:#f8fafc;">${escapeHtml(p.titulo)}:</strong> ${escapeHtml(p.detalhe)}</li>`).join('')}
+            </ul>
+
+            <div style="margin-bottom:6px; font-weight:700; color:#fbbf24; font-size:12.5px;">
+              ⚠️ Principais Pontos Fracos & Riscos de Transição:
+            </div>
+            <ul style="margin:0 0 12px 18px; padding:0;">
+              ${(analise.pontosNegativos || []).map(p => `<li style="margin-bottom:4px;"><strong style="color:#f8fafc;">${escapeHtml(p.titulo)}:</strong> ${escapeHtml(p.detalhe)}</li>`).join('')}
+            </ul>
+
+            <div style="margin-top:10px; padding-top:8px; border-top:1px solid rgba(255,255,255,0.08); font-size:11.5px; color:#94a3b8; display:flex; justify-content:space-between; align-items:center;">
+              <span><strong>Score de Viabilidade:</strong> <span style="color:#38bdf8; font-weight:800;">${analise.scoreViabilidade || 85}/100</span></span>
+              <span style="color:#10b981; font-weight:700;">${escapeHtml(analise.seloRecomendacao || 'QUICK WIN')}</span>
+            </div>
+          </div>
         </div>
 
-        <!-- Grid Prós vs Contras -->
+        <!-- Grid Prós vs Contras Detalhado -->
         <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 14px; margin-top: 16px;">
           <!-- Coluna Verde: Ganhos -->
           <div style="background: rgba(16,185,129,0.04); border: 1px solid rgba(16,185,129,0.2); border-radius: 10px; padding: 14px;">
@@ -222,18 +257,72 @@
         </div>
       `;
 
-      // Controle de Abas
+      // Controle de Abas e Eventos
       const bodyEl = overlay.querySelector('#comp-body');
+      
+      const vincularEventosAbaProsCons = () => {
+        bodyEl.querySelector('#btn-copiar-sticky-md')?.addEventListener('click', () => {
+          const textoSticky = [
+            `# 📋 COMPARAÇÃO REAL vs CENÁRIO`,
+            `> **Premissa:** "${comparacao.premissa || 'Otimização'}" [${(comparacao.postura || 'realista').toUpperCase()}]`,
+            `> **Score de Viabilidade:** ${analise.scoreViabilidade || 85}/100 [${analise.seloRecomendacao || 'QUICK WIN'}]`,
+            '',
+            `## 🏆 PARECER DA CONSULTORIA`,
+            analise.parecerConsultoria || 'Otimização operacional.',
+            '',
+            `## 💪 PONTOS FORTES (GANHOS)`,
+            ...(analise.pontosPositivos || []).map(p => `- **${p.titulo}:** ${p.detalhe}`),
+            '',
+            `## ⚠️ PONTOS FRACOS & RISCOS DE TRANSIÇÃO`,
+            ...(analise.pontosNegativos || []).map(p => `- **${p.titulo}:** ${p.detalhe}`),
+          ].join('\n');
+          navigator.clipboard.writeText(textoSticky);
+          alert('Markdown do Sticky Note copiado com sucesso!');
+        });
+
+        bodyEl.querySelector('#btn-fixar-sticky-canvas')?.addEventListener('click', () => {
+          const textoSticky = [
+            `# 📋 COMPARAÇÃO REAL vs CENÁRIO`,
+            `> **Premissa:** "${comparacao.premissa || 'Otimização'}" [${(comparacao.postura || 'realista').toUpperCase()}]`,
+            `> **Score:** ${analise.scoreViabilidade || 85}/100 [${analise.seloRecomendacao || 'QUICK WIN'}]`,
+            '',
+            `## 🏆 PARECER`,
+            analise.parecerConsultoria || 'Otimização operacional.',
+            '',
+            `## 💪 PONTOS FORTES`,
+            ...(analise.pontosPositivos || []).map(p => `- **${p.titulo}:** ${p.detalhe}`),
+            '',
+            `## ⚠️ PONTOS FRACOS & RISCOS`,
+            ...(analise.pontosNegativos || []).map(p => `- **${p.titulo}:** ${p.detalhe}`),
+          ].join('\n');
+
+          if (window.createNote) {
+            const vp = document.getElementById('canvas-viewport');
+            const rect = vp ? vp.getBoundingClientRect() : { width: 800, height: 600 };
+            const zoom = window.zoom || 1.0;
+            const pan = window.panOffset || { x: 100, y: 100 };
+            const x = (rect.width / 2 - pan.x) / zoom - 100;
+            const y = (rect.height / 2 - pan.y) / zoom - 100;
+            window.createNote(x, y, { text: textoSticky, color: 'blue' });
+            overlay.remove();
+          }
+        });
+      };
+
       bodyEl.innerHTML = renderAbaProsCons();
+      vincularEventosAbaProsCons();
 
       overlay.querySelectorAll('.comp-tab-btn').forEach(btn => {
         btn.addEventListener('click', () => {
           overlay.querySelectorAll('.comp-tab-btn').forEach(b => b.classList.remove('active'));
           btn.classList.add('active');
           const tab = btn.dataset.tab;
-          if (tab === 'pros-cons') bodyEl.innerHTML = renderAbaProsCons();
-          else if (tab === 'diff') bodyEl.innerHTML = renderAbaDiff();
-          else if (tab === 'markdowns') {
+          if (tab === 'pros-cons') {
+            bodyEl.innerHTML = renderAbaProsCons();
+            vincularEventosAbaProsCons();
+          } else if (tab === 'diff') {
+            bodyEl.innerHTML = renderAbaDiff();
+          } else if (tab === 'markdowns') {
             bodyEl.innerHTML = renderAbaMarkdowns();
             bodyEl.querySelector('#btn-copiar-md-base')?.addEventListener('click', () => {
               navigator.clipboard.writeText(analise.markdownBase || '');

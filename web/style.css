@@ -2051,6 +2051,25 @@ body {
 
 .sticky-note-text::placeholder { color: var(--text-muted); }
 
+.sticky-note.sticky-note-blue-comparativo {
+  width: 360px;
+  min-height: 240px;
+  background: rgba(15, 23, 42, 0.95);
+  border: 1px solid rgba(59, 130, 246, 0.4);
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.6), 0 0 25px rgba(59, 130, 246, 0.2);
+}
+
+.sticky-note.sticky-note-blue-comparativo::before {
+  background: linear-gradient(90deg, #3b82f6, #60a5fa);
+  height: 5px;
+}
+
+.sticky-note.sticky-note-blue-comparativo .sticky-note-text {
+  font-size: 12px;
+  line-height: 1.5;
+  color: #bfdbfe;
+}
+
 /* 8. HOME SCREEN — Multi-canvas management */
 #home-screen {
   position: absolute;
