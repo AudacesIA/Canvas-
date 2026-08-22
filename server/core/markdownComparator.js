@@ -105,58 +105,78 @@ export function compararProcessosMarkdown(baseCanvas, cenarioCanvas, { clienteNo
     });
   }
 
-  // 3. Recomendação Estratégica da Consultoria
+  // 3. Recomendação Estratégica & Score de Viabilidade da Consultoria
+  let scoreViabilidade = 55;
+  if (est.gargalos.delta < 0) scoreViabilidade += Math.abs(est.gargalos.delta) * 15;
+  if (est.handoffs.delta < 0) scoreViabilidade += Math.abs(est.handoffs.delta) * 10;
+  if (est.handoffs.delta > 0) scoreViabilidade -= est.handoffs.delta * 5;
+  if (compEstrutural.passos.removidos.length > 0) scoreViabilidade += compEstrutural.passos.removidos.length * 5;
+  if (cenarioCanvas.derivadoDe?.oportunidadeId) scoreViabilidade += 10;
+  if (postura === 'otimista') scoreViabilidade += 5;
+  if (postura === 'pessimista') scoreViabilidade -= 5;
+  if (postura === 'exploratorio') scoreViabilidade -= 8;
+  scoreViabilidade = Math.max(20, Math.min(98, scoreViabilidade));
+
   let parecerConsultoria = '';
   let seloRecomendacao = 'QUICK WIN';
 
-  if (est.gargalos.delta < 0 && est.handoffs.delta <= 0) {
-    seloRecomendacao = 'RECOMENDAÇÃO IMEDIATA (QUICK WIN)';
-    parecerConsultoria = `O cenário apresenta alto ganho de eficiência com baixo atrito de implantação. A eliminação de ${Math.abs(est.gargalos.delta)} gargalo(s) destrava fluxo de caixa e reduz tempo de resposta ao cliente final.`;
+  if (scoreViabilidade >= 80) {
+    seloRecomendacao = `ALTA VIABILIDADE (SCORE ${scoreViabilidade}/100) — QUICK WIN`;
+    parecerConsultoria = `O cenário apresenta altíssimo retorno operacional com baixo atrito de transição. A eliminação direta de ${Math.abs(est.gargalos.delta || 1)} gargalo(s) destrava fluxo de caixa e reduz tempo de resposta ao cliente.`;
   } else if (postura === 'exploratorio') {
-    seloRecomendacao = 'PROJETO ESTRATÉGICO DE MÉDIO PRAZO';
-    parecerConsultoria = 'Recomendado para a fase de expansão ou novo ciclo orçamentário. O ganho de escala é substancial, justificando a contratação/integração tecnológica.';
+    seloRecomendacao = `PROJETO ESTRATÉGICO (SCORE ${scoreViabilidade}/100)`;
+    parecerConsultoria = 'Recomendado para ciclo de expansão ou novo orçamento. O ganho de escala tecnológica é substancial, justificando a contratação ou automação.';
   } else {
-    seloRecomendacao = 'OPÇÃO TÁTICA / CONTINGÊNCIA';
-    parecerConsultoria = 'Cenário viável para testes pontuais ou mitigação de riscos específicos. Avaliar a aceitação da equipe antes do rollout definitivo.';
+    seloRecomendacao = `OPÇÃO TÁTICA (SCORE ${scoreViabilidade}/100)`;
+    parecerConsultoria = 'Cenário viável para testes pontuais ou mitigação de riscos de capacidade. Avaliar a aceitação da equipe antes do rollout definitivo.';
   }
 
-  // 4. Montar Relatório Executivo em Markdown
-  const relatorioMd = [
-    `# 📊 DOSSIÊ EXECUTIVO DE COMPARAÇÃO DE PROCESSOS`,
-    `> **Processo Original (As-Is):** ${baseCanvas.name || 'Processo Base'}`,
-    `> **Cenário Simulado (To-Be):** ${cenarioCanvas.name || 'Cenário'} [${postura.toUpperCase()}]`,
-    `> **Premissa Testada:** "${premissa}"`,
-    '',
-    `## 🏆 1. PARECER DA CONSULTORIA: ${seloRecomendacao}`,
-    parecerConsultoria,
-    '',
-    '## 📈 2. QUADRO RESUMO ESTRUTURAL',
-    '| Indicador | Processo Real (As-Is) | Cenário Simulado (To-Be) | Variação (Delta) |',
-    '| :--- | :---: | :---: | :---: |',
-    `| **Total de Etapas** | ${est.passos.base} | ${est.passos.cenario} | ${est.passos.delta >= 0 ? '+' : ''}${est.passos.delta} |`,
-    `| **Passagens de Bastão (Handoffs)** | ${est.handoffs.base} | ${est.handoffs.cenario} | ${est.handoffs.delta >= 0 ? '+' : ''}${est.handoffs.delta} |`,
-    `| **Gargalos Operacionais** | ${est.gargalos.base} | ${est.gargalos.cenario} | ${est.gargalos.delta >= 0 ? '+' : ''}${est.gargalos.delta} |`,
-    `| **Etapas Sem Responsável Definido** | ${est.semDono.base} | ${est.semDono.cenario} | ${est.semDono.delta >= 0 ? '+' : ''}${est.semDono.delta} |`,
-    '',
-    '## 🟢 3. PONTOS POSITIVOS & GANHOS OPERACIONAIS',
-    ...pontosPositivos.map((p, i) => `### ${i + 1}. ${p.titulo}\n${p.detalhe}\n`),
-    '## 🔴 4. PONTOS DE ATENÇÃO, RISCOS & TRADE-OFFS',
-    ...pontosNegativos.map((p, i) => `### ${i + 1}. [Risco ${p.severidade.toUpperCase()}] ${p.titulo}\n${p.detalhe}\n`),
-    '## 📋 5. TRANSFORMAÇÃO ETAPA POR ETAPA',
-    compEstrutural.passos.removidos.length > 0 ? `**Passos Eliminados:**\n${compEstrutural.passos.removidos.map(p => `- ❌ ~~${p}~~`).join('\n')}\n` : '',
-    compEstrutural.passos.novos.length > 0 ? `**Novos Passos Introduzidos:**\n${compEstrutural.passos.novos.map(p => `- ✨ **${p}**`).join('\n')}\n` : '',
-  ].filter(Boolean).join('\n');
+  // 4. Montagem do Relatório Executivo Consolidado
+  const relatorio = [];
+  relatorio.push('# 📊 DOSSIÊ EXECUTIVO DE COMPARAÇÃO DE PROCESSOS');
+  if (clienteNome) relatorio.push(`> **Empresa:** ${clienteNome}`);
+  relatorio.push(`> **Processo Original (As-Is):** ${baseCanvas.name || 'Processo Real'}`);
+  relatorio.push(`> **Cenário Simulado (To-Be):** ${cenarioCanvas.name || 'Cenário'} [${postura.toUpperCase()}]`);
+  relatorio.push(`> **Premissa da Hipótese:** "${premissa}"`);
+  relatorio.push(`> **Score de Viabilidade da Consultoria:** **${scoreViabilidade}/100**`);
+  relatorio.push('');
+
+  relatorio.push(`## 🏆 1. PARECER DA CONSULTORIA: ${seloRecomendacao}`);
+  relatorio.push(parecerConsultoria);
+  relatorio.push('');
+
+  relatorio.push('## 📈 2. QUADRO RESUMO ESTRUTURAL');
+  relatorio.push('| Indicador | Processo Real (As-Is) | Cenário Simulado (To-Be) | Variação (Delta) |');
+  relatorio.push('| :--- | :---: | :---: | :---: |');
+  relatorio.push(`| **Total de Etapas** | ${est.passos.base} | ${est.passos.cenario} | ${est.passos.delta >= 0 ? '+' : ''}${est.passos.delta} |`);
+  relatorio.push(`| **Passagens de Bastão (Handoffs)** | ${est.handoffs.base} | ${est.handoffs.cenario} | ${est.handoffs.delta >= 0 ? '+' : ''}${est.handoffs.delta} |`);
+  relatorio.push(`| **Gargalos Operacionais** | ${est.gargalos.base} | ${est.gargalos.cenario} | ${est.gargalos.delta >= 0 ? '+' : ''}${est.gargalos.delta} |`);
+  relatorio.push(`| **Passos sem Responsável (Órfãos)** | ${est.malhasAbertas.base} | ${est.malhasAbertas.cenario} | ${est.malhasAbertas.delta >= 0 ? '+' : ''}${est.malhasAbertas.delta} |`);
+  relatorio.push('');
+
+  relatorio.push('## 🟢 3. PONTOS POSITIVOS & GANHOS OPERACIONAIS');
+  pontosPositivos.forEach((p, i) => {
+    relatorio.push(`${i + 1}. **${p.titulo}:** ${p.detalhe}`);
+  });
+  relatorio.push('');
+
+  relatorio.push('## 🔴 4. PONTOS DE ATENÇÃO, RISCOS & TRADE-OFFS');
+  pontosNegativos.forEach((p, i) => {
+    relatorio.push(`${i + 1}. **${p.titulo}:** ${p.detalhe}`);
+  });
+  relatorio.push('');
 
   return {
     postura,
     premissa,
     seloRecomendacao,
+    scoreViabilidade,
     parecerConsultoria,
     pontosPositivos,
     pontosNegativos,
     compEstrutural,
     markdownBase: mdBase,
     markdownCenario: mdCenario,
-    relatorioExecutivo: relatorioMd,
+    relatorioExecutivo: relatorio.join('\n'),
   };
 }

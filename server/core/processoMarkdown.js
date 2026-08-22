@@ -84,12 +84,12 @@ export function canvasParaMarkdown(canvas, { clienteNome = '' } = {}) {
 
   const md = [];
 
-  // 1. Cabeçalho
-  md.push(`# MAPEAMENTO DE PROCESSO: ${canvas.name || 'Processo Sem Título'}`);
+  // 1. Cabeçalho Oficial da Consultoria
+  md.push(`# MAPA DE PROCESSOS & GARGALOS OPERACIONAIS: ${canvas.name || 'Processo Sem Título'}`);
   if (clienteNome) md.push(`> **Empresa:** ${clienteNome}`);
   md.push(`> **Status:** ${statusTipo} | **Revisão:** rev.${canvas.rev || 1}`);
   if (isCenario && canvas.derivadoDe.premissa) {
-    md.push(`> **Premissa do Cenário:** "${canvas.derivadoDe.premissa}"`);
+    md.push(`> **Premissa da Simulação:** "${canvas.derivadoDe.premissa}"`);
   }
   md.push('');
 
@@ -97,8 +97,8 @@ export function canvasParaMarkdown(canvas, { clienteNome = '' } = {}) {
   md.push('## 1. VISÃO GERAL DA OPERAÇÃO');
   md.push(`- **Total de Etapas/Passos:** ${passosOrdenados.length}`);
   md.push(`- **Passagens de Bastão (Handoffs):** ${handoffsList.length} transferências entre áreas/cargos`);
-  md.push(`- **Gargalos Ativos Identificados:** ${gargalos.length}`);
-  md.push(`- **Oportunidades de Receita Registradas:** ${ops.length}`);
+  md.push(`- **Gargalos Operacionais Identificados:** ${gargalos.length}`);
+  md.push(`- **Oportunidades de Receita Mapeadas (✳):** ${ops.length}`);
   md.push(`- **Pontos de Medição / Breakpoints:** ${bps.length}`);
   md.push('');
 
@@ -126,7 +126,7 @@ export function canvasParaMarkdown(canvas, { clienteNome = '' } = {}) {
 
       if (n.bottleneck) {
         const cat = n.bottleneckCategory ? ` (${n.bottleneckCategory})` : '';
-        md.push(`- ⚠️ **Gargalo / Fricção:** ${n.bottleneck}${cat}`);
+        md.push(`- ⚠️ **Gargalo / Fricção Operacional:** ${n.bottleneck}${cat}`);
       }
 
       md.push('');
@@ -152,28 +152,26 @@ export function canvasParaMarkdown(canvas, { clienteNome = '' } = {}) {
   }
 
   // 5. Diagnóstico Lean & Desperdícios
-  md.push('## 4. MAPA DE DESPERDÍCIOS & GARGALOS (LEAN)');
+  md.push('## 4. MAPA DE GARGALOS & DESPERDÍCIOS LEAN');
   if (gargalos.length === 0) {
     md.push('*(Nenhum gargalo estrutural apontado explicitamente neste fluxo)*\n');
   } else {
     gargalos.forEach((n, i) => {
       md.push(`${i + 1}. **Passo "${n.name}":** ${n.bottleneck}`);
-      if (n.bottleneckCategory) md.push(`   - *Categoria de Desperdício:* ${n.bottleneckCategory}`);
+      if (n.bottleneckCategory) md.push(`   - *Categoria Lean:* ${n.bottleneckCategory}`);
     });
     md.push('');
   }
 
-  // 6. Oportunidades & Hipóteses
+  // 6. Oportunidades de Receita (✳)
   if (ops.length > 0) {
-    md.push('## 5. OPORTUNIDADES DE RECEITA IDENTIFICADAS');
+    md.push('## 5. OPORTUNIDADES DE RECEITA DESCOBERTAS (✳)');
     ops.forEach((op, i) => {
       md.push(`### Oportunidade #${i + 1}: ${op.titulo || 'Sem título'}`);
-      if (op.premissa) md.push(`- **Premissa:** ${op.premissa}`);
-      if (op.impactoEstimado) md.push(`- **Impacto Financeiro/Operacional:** ${op.impactoEstimado}`);
-      if (op.acoesSugeridas && op.acoesSugeridas.length) {
-        md.push('- **Ações Recomendadas:**');
-        op.acoesSugeridas.forEach(a => md.push(`  - ${a}`));
-      }
+      if (op.descricao) md.push(`- **Solução Proposta:** ${op.descricao}`);
+      if (op.potencialReceita) md.push(`- **Potencial de Destravamento de Receita:** ${op.potencialReceita}`);
+      if (op.posturaSugerida) md.push(`- **Postura Sugerida para Simulação:** ${op.posturaSugerida.toUpperCase()}`);
+      if (op.status) md.push(`- **Status da Hipótese:** ${op.status.toUpperCase()}`);
       md.push('');
     });
   }

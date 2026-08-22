@@ -110,7 +110,12 @@
 
     const cenarioBtn = op.cenarioId
       ? `<button class="op-cenario-btn active" data-abrir-cenario="${op.cenarioId}" title="Abrir cenário já simulado"><i class="fa-solid fa-arrow-up-right-from-square"></i> Ver Cenário</button>`
-      : `<button class="op-cenario-btn" data-simular-op="${op.id}" title="Simular cenário operacional E Se"><i class="fa-solid fa-bolt"></i> Simular Cenário</button>`;
+      : `<button class="op-cenario-btn" data-simular-op="${op.id}" title="Simular cenário derivado desta oportunidade"><i class="fa-solid fa-bolt"></i> Simular</button>
+         <button class="op-cenario-btn" data-copilot-op="${op.id}" style="background:rgba(96,165,250,0.15);color:#60a5fa;" title="Simular com Copilot IA"><i class="fa-solid fa-wand-magic-sparkles"></i> Copilot</button>`;
+
+    const potReceita = op.potencialReceita
+      ? `<div style="font-size:11px; color:#34d399; font-weight:700; margin: 4px 0;"><i class="fa-solid fa-sack-dollar"></i> ${escapeHtml(op.potencialReceita)}</div>`
+      : '';
 
     el.innerHTML = `
       <div class="op-card-header">
@@ -118,6 +123,7 @@
         <span class="op-status-badge" style="color:${status.cor}">${status.label}</span>
       </div>
       <div class="op-card-titulo">${escapeHtml(op.titulo)}</div>
+      ${potReceita}
       <div class="op-card-previa">${escapeHtml(previa.slice(0, 85))}</div>
       <div class="op-card-actions">
         ${cenarioBtn}
@@ -163,27 +169,33 @@
     if (!arrastando) return;
     const dx = (e.clientX - arrastando.mouse.x) / zoom;
     const dy = (e.clientY - arrastando.mouse.y) / zoom;
-    if (!arrastando.moveu && Math.hypot(dx, dy) * zoom < 4) return;
-    arrastando.moveu = true;
+    if (Math.hypot(dx, dy) > 3) arrastando.moveu = true;
 
-    arrastando.op.x = Math.round(arrastando.base.x + dx);
-    arrastando.op.y = Math.round(arrastando.base.y + dy);
-    arrastando.el.style.left = `${arrastando.op.x}px`;
-    arrastando.el.style.top = `${arrastando.op.y}px`;
+    const nx = Math.round(arrastando.base.x + dx);
+    const ny = Math.round(arrastando.base.y + dy);
+    arrastando.el.style.left = `${nx}px`;
+    arrastando.el.style.top = `${ny}px`;
+    arrastando.op.x = nx;
+    arrastando.op.y = ny;
     redesenharSetas(arrastando.op.arestaId);
   });
 
   document.addEventListener('pointerup', () => {
     if (!arrastando) return;
-    const { op, el, moveu } = arrastando;
-    el.classList.remove('op-arrastando');
+    if (arrastando.moveu) saveToLocalStorage();
+    arrastando.el.classList.remove('op-arrastando');
     arrastando = null;
-    if (moveu) saveToLocalStorage();
-    else abrirNotepad(op);
   });
 
   // ── Interação ──────────────────────────────────────────────────────────────
   document.addEventListener('click', (e) => {
+    const card = e.target.closest('.op-card');
+    if (card && !e.target.closest('button') && !arrastando?.moveu) {
+      const op = oportunidades.find((o) => o.id === card.dataset.op);
+      if (op) abrirNotepad(op);
+      return;
+    }
+
     const ast = e.target.closest('.op-asterisco');
     if (ast) {
       e.stopPropagation();
@@ -198,6 +210,20 @@
       e.stopPropagation();
       const op = oportunidades.find((o) => o.id === btnSimular.dataset.simularOp);
       if (op) abrirModalCriarCenario(op);
+      return;
+    }
+
+    const btnCopilot = e.target.closest('[data-copilot-op]');
+    if (btnCopilot) {
+      e.stopPropagation();
+      const op = oportunidades.find((o) => o.id === btnCopilot.dataset.copilotOp);
+      if (op && window.AudasysChat) {
+        const drawer = document.getElementById('chat-drawer');
+        if (!drawer || !drawer.classList.contains('open')) {
+          window.AudasysChat.toggleChat();
+        }
+        window.AudasysChat.processarMensagemUsuario(`Simular cenário para a oportunidade de receita: "${op.titulo}". Premissa: ${op.descricao || op.titulo}`);
+      }
       return;
     }
 

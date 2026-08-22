@@ -94,9 +94,14 @@
         <span class="op-postura-badge" style="color:${postura.cor};background:${postura.bg};margin-left:8px;"><i class="fa-solid ${postura.icon}"></i> ${postura.label}</span>`;
 
       overlay.querySelector('#comp-selo-recomendacao').innerHTML = `
-        <span style="font-size:11px; font-weight:700; color:#10b981; background:rgba(16,185,129,0.15); border:1px solid rgba(16,185,129,0.3); padding:4px 10px; border-radius:6px; text-transform:uppercase;">
-          <i class="fa-solid fa-check-double"></i> ${escapeHtml(analise.seloRecomendacao || 'QUICK WIN')}
-        </span>`;
+        <div style="display:flex; align-items:center; gap:8px;">
+          <span style="font-size:11px; font-weight:800; color:#38bdf8; background:rgba(56,189,248,0.15); border:1px solid rgba(56,189,248,0.3); padding:4px 10px; border-radius:6px;">
+            <i class="fa-solid fa-chart-line"></i> VIABILIDADE: ${analise.scoreViabilidade || 85}/100
+          </span>
+          <span style="font-size:11px; font-weight:700; color:#10b981; background:rgba(16,185,129,0.15); border:1px solid rgba(16,185,129,0.3); padding:4px 10px; border-radius:6px; text-transform:uppercase;">
+            <i class="fa-solid fa-check-double"></i> ${escapeHtml(analise.seloRecomendacao || 'QUICK WIN')}
+          </span>
+        </div>`;
 
       // ── ABA 1: Prós & Contras ──────────────────────────────────────────────
       const renderAbaProsCons = () => `

@@ -78,6 +78,15 @@
     el.querySelector('.chat-quick-actions').addEventListener('click', (e) => {
       const btn = e.target.closest('.chat-quick-btn');
       if (!btn) return;
+
+      if (btn.classList.contains('op-chip')) {
+        const title = btn.dataset.opTitle;
+        const desc = btn.dataset.opDesc;
+        input.value = `Simular cenário para a oportunidade: "${title}". Premissa: ${desc || title}`;
+        enviar();
+        return;
+      }
+
       const act = btn.dataset.action;
       if (act === 'rota') {
         input.value = 'Como a operação ficaria se criássemos uma rota alternativa dividindo a frota entre BA e Sul terceirizado?';
@@ -111,6 +120,31 @@
     });
   }
 
+  function atualizarChipsOportunidades(drw) {
+    const quickEl = drw.querySelector('.chat-quick-actions');
+    if (!quickEl) return;
+    const ops = (window.oportunidades || []);
+    if (ops.length === 0) {
+      quickEl.innerHTML = `
+        <button class="chat-quick-btn" data-action="rota"><i class="fa-solid fa-truck"></i> Simular Rota Alternativa</button>
+        <button class="chat-quick-btn" data-action="handoffs"><i class="fa-solid fa-arrows-split-up-and-left"></i> Cortar Handoffs</button>
+        <button class="chat-quick-btn" data-action="robo"><i class="fa-solid fa-robot"></i> Automação IA / Robótica</button>
+      `;
+      return;
+    }
+    
+    quickEl.innerHTML = `
+      <div style="width:100%; font-size:10.5px; font-weight:700; color:#94a3b8; margin-bottom:4px; text-transform:uppercase; display:flex; align-items:center; gap:5px;">
+        <i class="fa-solid fa-asterisk" style="color:#60a5fa;"></i> Oportunidades Mapeadas no Processo:
+      </div>
+      ${ops.map(o => `
+        <button class="chat-quick-btn op-chip" data-op-title="${escapeHtml(o.titulo)}" data-op-desc="${escapeHtml(o.descricao || '')}" title="Simular cenário a partir desta oportunidade">
+          <i class="fa-solid fa-bolt" style="color:#fbbf24;"></i> ${escapeHtml(o.titulo.slice(0, 35))}${o.titulo.length > 35 ? '...' : ''}
+        </button>
+      `).join('')}
+    `;
+  }
+
   function toggleChat() {
     drawer = criarDrawer();
     isOpen = drawer.classList.contains('open');
@@ -118,6 +152,7 @@
       drawer.classList.remove('open');
     } else {
       window.OverlayManager?.closeAll('chat');
+      atualizarChipsOportunidades(drawer);
       drawer.classList.add('open');
       setTimeout(() => drawer.querySelector('#chat-input-text')?.focus(), 200);
     }
