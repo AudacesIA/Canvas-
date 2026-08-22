@@ -2286,15 +2286,17 @@ document.getElementById('btn-save').addEventListener('click', async () => {
 });
 
 document.getElementById('btn-export').addEventListener('click', () => {
-  const data = {
-    nodes,
-    connections,
-    notes,
-    zoom,
-    panOffset,
-    nextNodeId,
-    nextNoteId
-  };
+  /**
+   * `serializeCanvas()` e não uma lista montada à mão.
+   *
+   * A lista à mão nasceu antes da camada de medição e da oportunidade de
+   * receita, e nunca foi atualizada: o arquivo exportado saía sem `breakpoints`
+   * e sem `oportunidades`, silenciosamente. Quem exportava para fazer backup
+   * antes de uma reunião levava um canvas com duas camadas a menos e só
+   * descobria ao reimportar. Um único ponto de serialização é o que impede a
+   * próxima camada de repetir isso.
+   */
+  const data = serializeCanvas();
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -2321,8 +2323,15 @@ function clearAllBoard() {
   nodes = [];
   connections = [];
   notes = [];
+  // Zeradas junto com o resto: sobreviviam à limpeza e o autosave seguinte
+  // regravava medições e oportunidades de um canvas que não existe mais. O
+  // servidor as descartava por órfãs, então o efeito era perda silenciosa.
+  breakpoints = [];
+  oportunidades = [];
   nextNodeId = 1;
   nextNoteId = 1;
+  window.AudasysBreakpoints?.renderTodos?.();
+  window.AudasysOportunidades?.renderTodos?.();
   deselectAll();
 }
 
@@ -3128,14 +3137,27 @@ function renderFolderDOM(folder, canvases, home) {
 
 function renderCanvasCard(cv, folder, home) {
   const card = document.createElement('div');
-  card.className = 'canvas-home-card';
+  /**
+   * Cenário e processo real não podem parecer a mesma coisa na home.
+   *
+   * É o risco que o `derivadoDe` existe para conter: um cenário aceito por
+   * engano virar "o processo que a empresa tem". Na tela isso custa um selo —
+   * sem ele os dois cards são idênticos, e o erro é silencioso.
+   */
+  const cenario = cv.derivadoDe || null;
+  card.className = `canvas-home-card${cenario ? ' canvas-card-cenario' : ''}`;
   card.id = `canvas-card-${cv.id}`;
 
   card.innerHTML = `
     <div class="canvas-card-menu">
       <button class="canvas-card-menu-btn" title="Ações"><i class="fa-solid fa-ellipsis"></i></button>
     </div>
+    ${cenario ? `<div class="canvas-card-selo" title="${escapeHtml(cenario.premissa || '')}">
+        <i class="fa-solid fa-code-branch"></i> cenário
+        <span class="canvas-card-postura">${escapeHtml(cenario.postura || '')}</span>
+      </div>` : ''}
     <div class="canvas-card-name">${escapeHtml(cv.name)}</div>
+    ${cenario?.premissa ? `<div class="canvas-card-premissa">${escapeHtml(cenario.premissa)}</div>` : ''}
     <div class="canvas-card-meta"><i class="fa-regular fa-clock"></i> ${formatDate(cv.lastModified)}${
       cv.pendingChangesets
         ? `<span class="canvas-card-pending" title="O agente propôs alterações que ainda não foram revisadas"><i class="fa-solid fa-wand-magic-sparkles"></i> ${cv.pendingChangesets}</span>`

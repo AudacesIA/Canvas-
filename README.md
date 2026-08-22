@@ -37,7 +37,7 @@ o Claude fechado, e trocar `FsStorage` por `SupabaseStorage` não toca em `mcp/`
 | `server/http/` | Roteador mínimo, estáticos, rotas. Sem Express |
 | `mcp/` | Tradução tool→HTTP. Nunca toca em arquivo |
 | `web/` | O app. `app.js` ainda é o monólito; vira módulos ES na F4 |
-| `data/clients/<id>/` | `client.json`, `folders.json`, `canvases/`, `changesets/` |
+| `data/clients/<id>/` | `client.json`, `folders.json`, `canvases/`, `changesets/`, `docs/` |
 
 **Não existe arquivo de índice de canvases.** A home é derivada de um listing
 de `canvases/*.json` mais o cabeçalho de cada um. O `audaces_home` do
@@ -134,6 +134,12 @@ Ops: `addOportunidade` · `updateOportunidade` · `removeOportunidade`.
 Leitura: **`get_oportunidades`**, com o corpo inteiro (o outline traz só títulos,
 para não estourar o orçamento de token que justifica a existência dele).
 
+`cenarioId` **não** é editável por op: quem o escreve é `criarCenario`, e o
+autosave do navegador é impedido de apagá-lo em `saveCanvas`. Uma aba aberta
+antes do cenário existir tem a oportunidade sem o vínculo em memória, e ela manda
+o documento inteiro — é a mesma armadilha do `childCanvas`, e desta vez a guarda
+está no servidor.
+
 ### Quatro marcas, uma aresta
 
 Rótulo, barra de gargalo, bolinha de medição e asterisco disputam o ponto médio.
@@ -160,6 +166,70 @@ preço de o elemento ter deixado de fazer uma coisa só.
 O agente **lê** o gargalo da passagem no outline, mas não propõe: não existe op
 `updateEdge`. Assimetria consciente.
 
+## As duas etapas da consultoria
+
+O consultor mapeia o processo real e seus gargalos; depois desenha, para cada
+oportunidade de receita, o cenário que a testa. As duas etapas viviam em ilhas
+separadas — oportunidade na tela, cenário só no MCP, sem nada ligando as duas.
+
+```
+gargalo ──▶ oportunidade de receita ──1:1──▶ cenário "e se" ──▶ comparação
+ (nó ou      (asterisco na aresta)          (fork navegável)     (documento)
+  aresta)
+```
+
+**Um cenário por oportunidade.** `derivadoDe.oportunidadeId` diz o que o cenário
+pré-valida; `oportunidade.cenarioId` é a ponta de volta. Um segundo cenário para a
+mesma oportunidade é **409**, e cenário sem `oportunidadeId` é **422** — um
+desenho sem a pergunta que o originou não decide nada.
+
+A contagem não pode divergir porque **não há uma segunda lista**. O mostrador
+(`GET …/cenarios`) devolve uma linha por OPORTUNIDADE, com o cenário dela ou
+`null`; quem itera aquilo não consegue exibir números diferentes. Cenário cuja
+oportunidade foi apagada não some: sai em `orfaos`, porque um canvas em disco que
+a tela não alcança é o mesmo dado invisível que o resto do projeto recusa.
+
+O fork **já nasce idêntico** ao processo real (`seed`). O agente não redesenha o
+cenário do zero — propõe só o que muda sob a premissa. Reconstruí-lo a partir do
+Markdown seria um round-trip que perde `fieldMeta`, `metrics`, `childCanvas` e
+procedência: **o documento é saída, nunca entrada.**
+
+### Órfã com cenário sobrevive
+
+A oportunidade cuja aresta some é descartada na hidratação — menos quando tem
+cenário. Aí ela fica com `arestaId: null` e `desancorada: true`, e aparece no
+mostrador marcada. Apagar uma aresta leva meio segundo; destruir o vínculo de um
+canvas inteiro não pode ser efeito colateral silencioso disso.
+
+Como a hidratação enxerga um canvas por vez, ela decide pelo cache `cenarioId`. O
+mostrador **conserta a deriva** que encontrar, na leitura: a verdade é o
+`derivadoDe` de cada cenário, e é contra ele que a tela resolve.
+
+## Entregáveis em Markdown
+
+Dois documentos, em `data/clients/<c>/docs/<canvasId>/`:
+
+| Arquivo | O quê |
+|---|---|
+| `mapa.md` | O processo real: passos, gargalos de passo e de passagem, medições e malhas abertas, oportunidades, números apurados |
+| `comparacao-<cenarioId>.md` | Real × cenário |
+
+Ficam **fora do JSON do canvas**: são grandes, a tela não os desenha, e no
+autosave e no patch SSE só custariam banda. Em arquivo são diffáveis entre
+semanas — que é como a consultoria mostra o próprio avanço.
+
+`GET …/docs/<nome>.md` devolve `text/markdown` cru, não JSON: o documento existe
+para ser lido fora da ferramenta.
+
+**A comparação tem dois autores, declarados no próprio arquivo.** A estrutura é
+CONTADA pelo servidor (`comparador.js`); a leitura — pontos fortes, fracos,
+veredito — é redigida pelo agente e chega por parâmetro. O daemon não fala com
+nenhum LLM, e isso não é limitação de infraestrutura: é o que garante que todo
+número do documento seja contado e nenhum seja gerado. Onde o comparador diz
+"não comparável", o documento repete — dizer isso é informação.
+
+Ops: nenhuma. Tools: **`gerar_mapa_gargalos`** · **`gerar_comparacao`**.
+
 ## Geometria é do servidor
 
 O agente descreve topologia; `server/core/layoutService.js` (dagre) resolve x/y.
@@ -183,7 +253,7 @@ Registrado em `~/Library/Application Support/Claude/claude_desktop_config.json`
 como `audasys-canvas`. O servidor MCP sobe o daemon sozinho se ele não estiver
 no ar (`ensureDaemon`), destacado, para sobreviver ao fechamento do Desktop.
 
-Onze tools:
+Dezesseis tools:
 
 | | |
 |---|---|
@@ -195,9 +265,27 @@ Onze tools:
 | `suggest_layout` | calcula posições; não aplica |
 | `get_breakpoints` | onde o processo é medido, e o que está em malha aberta |
 | `get_oportunidades` | onde há dinheiro na mesa, com as notas inteiras |
+| `criar_cenario` | forka o processo real para testar UMA oportunidade |
+| `get_cenarios` | o pareamento: uma linha por oportunidade, com cenário ou sem |
+| `comparar_cenario` | o que muda entre real e cenário, em estrutura |
+| `gerar_mapa_gargalos` | escreve `mapa.md` |
+| `gerar_comparacao` | escreve `comparacao-<cenarioId>.md` |
 | `validate_canvas` | checagens estruturais e de legibilidade |
 | `list_pending_proposals` | o que ficou esperando revisão |
 | `focus_canvas` | destaca nós na tela do consultor |
+
+A ordem em que elas se encadeiam é a da consultoria, e `get_cenarios` é o pivô:
+ele diz o que já foi desenhado e o que falta.
+
+```
+get_canvas_outline → (mapear gargalos) → gerar_mapa_gargalos
+                          ↓
+                   get_oportunidades
+                          ↓
+   get_cenarios ──▶ criar_cenario ──▶ propose_changeset (no cenário)
+                                              ↓
+                            comparar_cenario ──▶ gerar_comparacao
+```
 
 **A metodologia não mora no MCP** — ela vive no Project do Claude Desktop. O MCP
 é só a superfície de manipulação.
@@ -254,6 +342,10 @@ por `rev`. Cria e apaga um cliente temporário.
 | `GET` `PUT` `PATCH` `DELETE` | `/api/clients/:c/canvases/:id` |
 | `POST` | `/api/clients/:c/canvases/:id/duplicate` · `/move` |
 | `POST` | `/api/import` — semear canvas a partir de um JSON |
+| `POST` `GET` | `/api/clients/:c/canvases/:id/cenarios` — criar · pareamento |
+| `GET` | `/api/clients/:c/canvases/:id/comparar` — do CENÁRIO |
+| `POST` | `/api/clients/:c/canvases/:id/docs/mapa` · `/docs/comparacao` |
+| `GET` | `/api/clients/:c/canvases/:id/docs` · `/docs/:nome` (`text/markdown`) |
 
 `GET` de canvas devolve `ETag: <rev>`; `PUT` aceita `If-Match: <rev>` e responde
 **409** com `currentRev` se o canvas mudou. Duas abas, ou o agente escrevendo

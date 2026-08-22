@@ -73,6 +73,16 @@
     moveCanvas: (clientId, canvasId, toClientId) =>
       request('POST', `/api/clients/${clientId}/canvases/${canvasId}/move`, { body: { toClientId } }),
 
+    // --- cenário "e se" ---
+    /** Uma linha por oportunidade, com o cenário dela ou `null`. */
+    cenarios: (clientId, canvasId) =>
+      request('GET', `/api/clients/${clientId}/canvases/${canvasId}/cenarios`),
+    criarCenario: (clientId, canvasId, body) =>
+      request('POST', `/api/clients/${clientId}/canvases/${canvasId}/cenarios`, { body }),
+    /** `canvasId` aqui é o do CENÁRIO, não o do processo real. */
+    comparar: (clientId, canvasId) =>
+      request('GET', `/api/clients/${clientId}/canvases/${canvasId}/comparar`),
+
     putCanvas: (clientId, canvasId, data, rev) =>
       request('PUT', `/api/clients/${clientId}/canvases/${canvasId}`, {
         body: data,

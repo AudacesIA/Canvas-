@@ -37,6 +37,14 @@ async function writeJsonAtomic(file, data) {
   await fs.rename(tmp, file);
 }
 
+/** Mesma garantia do `writeJsonAtomic`, para texto puro. */
+async function writeTextAtomic(file, texto) {
+  await fs.mkdir(path.dirname(file), { recursive: true });
+  const tmp = `${file}.${process.pid}.tmp`;
+  await fs.writeFile(tmp, texto, 'utf8');
+  await fs.rename(tmp, file);
+}
+
 async function listJsonIds(dir) {
   try {
     const entries = await fs.readdir(dir, { withFileTypes: true });
@@ -180,6 +188,61 @@ export class FsStorage extends Storage {
   }
 
   // --- changesets ---
+
+  // --- documentos (.md) ---
+
+  docsDir(clientId, canvasId) {
+    return path.join(this.clientDir(clientId), 'docs', safeSegment(canvasId, 'canvasId'));
+  }
+
+  /**
+   * `safeSegment` no nome também, não só no id.
+   *
+   * O nome do arquivo é o único destes três segmentos que chega composto pelo
+   * servidor (`comparacao-<cenarioId>.md`) — e um cenárioId vindo da rede entra
+   * nele. Sem a checagem, `..%2F..%2Fclient.json` escreveria fora do diretório.
+   */
+  #docFile(clientId, canvasId, nome) {
+    const base = String(nome ?? '');
+    if (!base.endsWith('.md')) {
+      throw Object.assign(new Error(`documento precisa terminar em .md: ${JSON.stringify(base)}`), { status: 400 });
+    }
+    safeSegment(base, 'nome do documento');
+    return path.join(this.docsDir(clientId, canvasId), base);
+  }
+
+  async readDoc(clientId, canvasId, nome) {
+    try {
+      return await fs.readFile(this.#docFile(clientId, canvasId, nome), 'utf8');
+    } catch (err) {
+      if (err.code === 'ENOENT') return null;
+      throw err;
+    }
+  }
+
+  async writeDoc(clientId, canvasId, nome, texto) {
+    const file = this.#docFile(clientId, canvasId, nome);
+    await writeTextAtomic(file, String(texto ?? ''));
+    return { nome, caminho: file, bytes: Buffer.byteLength(String(texto ?? ''), 'utf8') };
+  }
+
+  async listDocs(clientId, canvasId) {
+    const dir = this.docsDir(clientId, canvasId);
+    let entries;
+    try {
+      entries = await fs.readdir(dir, { withFileTypes: true });
+    } catch (err) {
+      if (err.code === 'ENOENT') return [];
+      throw err;
+    }
+    const out = [];
+    for (const e of entries) {
+      if (!e.isFile() || !e.name.endsWith('.md') || e.name.includes('.tmp')) continue;
+      const st = await fs.stat(path.join(dir, e.name));
+      out.push({ nome: e.name, bytes: st.size, modificadoEm: st.mtime.toISOString() });
+    }
+    return out.sort((a, b) => a.nome.localeCompare(b.nome));
+  }
 
   async listChangesets(clientId, scope = 'pending') {
     const base = path.join(this.clientDir(clientId), 'changesets');

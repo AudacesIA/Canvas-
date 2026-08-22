@@ -58,4 +58,8 @@ export const client = {
     request('POST', `/api/clients/${clientId}/canvases/${canvasId}/layout`, body),
   validate: (clientId, canvasId) =>
     request('GET', `/api/clients/${clientId}/canvases/${canvasId}/validate`),
+  gerarMapa: (clientId, canvasId) =>
+    request('POST', `/api/clients/${clientId}/canvases/${canvasId}/docs/mapa`),
+  gerarComparacao: (clientId, canvasId, body) =>
+    request('POST', `/api/clients/${clientId}/canvases/${canvasId}/docs/comparacao`, body),
 };

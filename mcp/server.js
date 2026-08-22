@@ -448,27 +448,39 @@ server.registerTool(
       + 'operação ficaria sob uma premissa diferente. É a parte da consultoria que mostra ao dono '
       + 'o processo alternativo em vez de descrevê-lo.\n'
       + 'Depois de criar, use propose_changeset NO CANVAS DO CENÁRIO para aplicar as mudanças '
-      + '(remover o passo que some, ligar a passagem nova, mapear a oportunidade de receita).\n'
+      + '(remover o passo que some, ligar a passagem nova).\n'
       + 'A postura NÃO é um multiplicador: "pessimista" não significa reduzir 8%, significa uma '
-      + 'premissa mais dura escrita por extenso — algo que o dono possa contestar na reunião.',
+      + 'premissa mais dura escrita por extenso — algo que o dono possa contestar na reunião.\n\n'
+      + '⚠️ TODO cenário testa UMA oportunidade de receita, e cada oportunidade tem no máximo UM '
+      + 'cenário. Chame get_cenarios primeiro para ver quais ainda não foram desenhadas. A '
+      + 'sequência da consultoria é: gargalo → oportunidade de receita → cenário que a '
+      + 'pré-valida → comparação. Um cenário sem oportunidade é um desenho sem pergunta.',
     inputSchema: {
       clientId: z.string(),
       canvasId: z.string().describe('O canvas do processo REAL. Cenário de cenário é recusado.'),
+      oportunidadeId: z.string().describe(
+        'Qual oportunidade de receita este cenário pré-valida (id vindo de get_oportunidades ou '
+        + 'get_cenarios). Recusado se ela já tiver cenário — a regra é 1:1.'),
       premissa: z.string().describe(
         'A frase que origina o cenário: "frota própria MG→BA e Sul terceirizado". '
         + 'Obrigatória — sem ela ninguém contesta o desenho seis semanas depois.'),
       postura: z.enum(['realista', 'otimista', 'pessimista', 'exploratorio']).optional()
         .describe('exploratorio = o cenário distante que serve para dar tangibilidade '
           + '(o braço robótico), mesmo sabendo que não é para agora'),
-      nome: z.string().optional(),
+      nome: z.string().optional().describe('Padrão: o título da oportunidade.'),
     },
   },
-  guard(async ({ clientId, canvasId, premissa, postura, nome }) => {
-    const { canvas } = await client.criarCenario(clientId, canvasId, { premissa, postura, nome });
+  guard(async ({ clientId, canvasId, oportunidadeId, premissa, postura, nome }) => {
+    const { canvas } = await client.criarCenario(clientId, canvasId, {
+      premissa, postura, nome, oportunidadeId,
+    });
     return text(`Cenário criado: ${canvas.id}  "${canvas.name}"\n`
+      + `Testa a oportunidade: ${canvas.derivadoDe.oportunidadeId}\n`
       + `Premissa: ${canvas.derivadoDe.premissa}  [${canvas.derivadoDe.postura}]\n`
       + `Copiou ${canvas.nodes.length} passos e ${canvas.connections.length} passagens do processo real.\n\n`
-      + 'Agora proponha as alterações NESTE canvasId, e depois chame comparar_cenario.');
+      + 'O cenário JÁ É uma cópia idêntica do processo real — não o redesenhe do zero. Proponha '
+      + 'NESTE canvasId só o que MUDA sob a premissa (o passo que some, a passagem nova, o dono '
+      + 'que troca). Depois chame gerar_comparacao.');
   }),
 );
 
@@ -477,18 +489,32 @@ server.registerTool(
   {
     title: 'Cenários de um processo',
     description:
-      'Lista os cenários "e se" derivados de um canvas, com a premissa de cada um. '
-      + 'Chame antes de criar: repropor um cenário que já foi desenhado queima tempo de reunião.',
-    inputSchema: { clientId: z.string(), canvasId: z.string() },
+      'O pareamento entre oportunidades de receita e cenários: uma linha por OPORTUNIDADE, com o '
+      + 'cenário que a testa ou o aviso de que ela ainda não foi desenhada.\n'
+      + 'É a lista de trabalho: as oportunidades SEM cenário são o que falta pré-validar. Chame '
+      + 'antes de criar_cenario — a regra é um cenário por oportunidade, e repropor o que já foi '
+      + 'desenhado queima tempo de reunião.',
+    inputSchema: { clientId: z.string(), canvasId: z.string().describe('O canvas do processo REAL') },
   },
   guard(async ({ clientId, canvasId }) => {
-    const { cenarios } = await client.cenarios(clientId, canvasId);
-    if (!cenarios.length) {
-      return text('Nenhum cenário desenhado a partir deste processo ainda.');
+    const p = await client.cenarios(clientId, canvasId);
+    if (!p.total) {
+      return text('Nenhuma oportunidade de receita mapeada neste canvas ainda — e sem '
+        + 'oportunidade não há cenário a desenhar. Mapeie os gargalos primeiro.');
     }
-    return text(cenarios.map((c) =>
-      `${c.id}  "${c.name}"  [${c.derivadoDe.postura}]  ${c.nodeCount} passos\n`
-      + `   premissa: ${c.derivadoDe.premissa}`).join('\n\n'));
+    const linhas = p.oportunidades.map(({ oportunidade: o, cenario }) => (cenario
+      ? `✓ ${o.titulo}\n     cenário: ${cenario.id}  "${cenario.name}"  [${cenario.derivadoDe.postura}]`
+        + `  ${cenario.nodeCount} passos\n     premissa: ${cenario.derivadoDe.premissa}`
+      : `○ ${o.titulo}\n     SEM CENÁRIO — oportunidadeId: ${o.id}`));
+
+    const orfaos = p.orfaos.length
+      ? `\n\n⚠ ${p.orfaos.length} cenário(s) sem oportunidade correspondente: `
+        + `${p.orfaos.map((c) => `${c.id} "${c.name}"`).join(', ')}. A oportunidade que os originou `
+        + 'foi apagada do canvas real.'
+      : '';
+
+    return text(`${p.total} oportunidade(s) · ${p.comCenario} com cenário · ${p.semCenario} sem\n\n`
+      + `${linhas.join('\n\n')}${orfaos}`);
   }),
 );
 
@@ -509,6 +535,68 @@ server.registerTool(
     },
   },
   guard(async ({ clientId, canvasId }) => text((await client.comparar(clientId, canvasId)).texto)),
+);
+
+server.registerTool(
+  'gerar_mapa_gargalos',
+  {
+    title: 'Escrever o mapa de processos e gargalos',
+    description:
+      'Gera o ENTREGÁVEL em Markdown do processo real: os passos, onde ele trava (gargalo de '
+      + 'passo e de passagem de bastão), onde é medido e quais malhas estão abertas, as '
+      + 'oportunidades de receita já mapeadas e os números apurados. Grava em '
+      + '`data/clients/<c>/docs/<canvasId>/mapa.md` e devolve o texto.\n'
+      + 'É a PRIMEIRA das duas partes da consultoria — o retrato de como a empresa opera hoje. '
+      + 'Gere depois de mapear os gargalos e antes de desenhar cenários: é o documento contra o '
+      + 'qual toda comparação vai ser lida.\n'
+      + 'Sempre regenerado do canvas, nunca editado à mão. Chamar de novo sobrescreve.',
+    inputSchema: {
+      clientId: z.string(),
+      canvasId: z.string().describe('O canvas do processo REAL'),
+    },
+  },
+  guard(async ({ clientId, canvasId }) => {
+    const r = await client.gerarMapa(clientId, canvasId);
+    return text(`Mapa gravado: ${r.caminho}  (${r.bytes} bytes, rev ${r.rev})\n\n${r.texto}`);
+  }),
+);
+
+server.registerTool(
+  'gerar_comparacao',
+  {
+    title: 'Escrever a comparação real × cenário',
+    description:
+      'Gera o ENTREGÁVEL em Markdown que compara o processo real com um cenário. Grava em '
+      + '`data/clients/<c>/docs/<canvasIdDoProcessoReal>/comparacao-<cenarioId>.md`.\n\n'
+      + 'O documento tem DUAS metades, e elas têm autores diferentes:\n'
+      + '• A estrutura é CONTADA pelo servidor dos dois canvases — passos que somem e nascem, '
+      + 'handoffs, gargalos por categoria Lean, malhas abertas. Você não a escreve e não a '
+      + 'altera.\n'
+      + '• A leitura (pontos fortes, pontos fracos, veredito) é SUA, e é o que você passa aqui.\n\n'
+      + '⚠️ Chame comparar_cenario ANTES e escreva a narrativa a partir daquele quadro. Não cite '
+      + 'número que o quadro não traga: onde ele diz "não comparável", ninguém apurou, e um '
+      + 'percentual inventado é exatamente o que destrói a distinção entre o que a consultoria '
+      + 'apurou e o que ela supôs. Argumente sobre a ESTRUTURA — menos um handoff, menos uma '
+      + 'malha aberta, um passo a mais — que é o que está de fato demonstrado.',
+    inputSchema: {
+      clientId: z.string(),
+      canvasId: z.string().describe('O canvas do CENÁRIO (o derivado), não o do processo real'),
+      pontosFortes: z.array(z.string()).describe(
+        'O que o cenário resolve, ancorado no que a comparação mostra. '
+        + 'Ex.: "elimina a única passagem de bastão em malha aberta".'),
+      pontosFracos: z.array(z.string()).describe(
+        'O que ele custa, cria ou deixa por apurar. Um cenário sem ponto fraco não foi analisado — '
+        + 'foi vendido, e o dono percebe.'),
+      veredito: z.string().describe(
+        'A recomendação em uma ou duas frases: vale testar, vale descartar, ou falta apurar o quê.'),
+    },
+  },
+  guard(async ({ clientId, canvasId, pontosFortes, pontosFracos, veredito }) => {
+    const r = await client.gerarComparacao(clientId, canvasId, {
+      pontosFortes, pontosFracos, veredito,
+    });
+    return text(`Comparação gravada: ${r.caminho}  (${r.bytes} bytes)\n\n${r.texto}`);
+  }),
 );
 
 server.registerTool(

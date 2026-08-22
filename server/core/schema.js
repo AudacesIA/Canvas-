@@ -431,6 +431,23 @@ export function hydrateDerivadoDe(raw) {
   if (!raw || typeof raw !== 'object' || !raw.canvasId) return null;
   return {
     canvasId: String(raw.canvasId),
+    /**
+     * QUAL oportunidade este cenário testa.
+     *
+     * O vínculo com o canvas responde "de onde isto saiu"; este responde "o que
+     * isto está pré-validando", e é o que dá sentido à sequência da consultoria:
+     * gargalo → oportunidade de receita → cenário que a testa → comparação.
+     *
+     * Sem ele o cenário fica solto — e a pergunta que o consultor leva para a
+     * reunião ("quantas das nossas ideias já foram desenhadas?") não tem
+     * resposta, porque cenário e oportunidade viviam em coleções que ninguém
+     * conseguia cruzar.
+     *
+     * `null` é aceito na leitura porque cenários criados antes deste campo
+     * existem em disco. A EXIGÊNCIA mora em `criarCenario`, não aqui: hidratar
+     * é reconstruir o que está gravado, não recusá-lo.
+     */
+    oportunidadeId: raw.oportunidadeId ? String(raw.oportunidadeId) : null,
     premissa: String(raw.premissa ?? ''),
     postura: oneOf(raw.postura, POSTURAS, 'realista'),
     criadoEm: raw.criadoEm ?? new Date().toISOString(),
@@ -494,6 +511,26 @@ export function hydrateOportunidade(raw, index = 0) {
     arestaId: raw?.arestaId ?? null,
     titulo: String(raw?.titulo ?? ''),
     markdown: String(raw?.markdown ?? ''),
+    /**
+     * O cenário que pré-valida esta oportunidade. Um só — a regra é 1:1.
+     *
+     * É a ponta de VOLTA de `derivadoDe.oportunidadeId`, e existe por um motivo
+     * mecânico: a hidratação enxerga um canvas de cada vez e não tem como saber
+     * que outro arquivo aponta para esta oportunidade. Sem este campo, a regra
+     * de descarte da órfã (abaixo) apagaria a única ponta do vínculo.
+     *
+     * A fonte da verdade continua sendo o `derivadoDe` do cenário, que é quem
+     * carrega a própria procedência. Este campo é cache: se o cenário for
+     * apagado, ele fica pendurado — e o pior efeito possível é a oportunidade
+     * sobreviver desancorada, que é o lado seguro do erro. O mostrador resolve
+     * contra a lista real de cenários, então a tela nunca mente.
+     */
+    cenarioId: raw?.cenarioId ? String(raw.cenarioId) : null,
+    /**
+     * Perdeu a passagem que a originou, mas tem cenário e por isso sobreviveu.
+     * DERIVADA na hidratação — nunca escrita à mão.
+     */
+    desancorada: false,
     // Posição própria, arrastável como um nó. `null` = ainda não foi movida, e
     // aí o cliente empilha a partir do asterisco. Sem isto os cards ficavam
     // presos numa fila vertical que se sobrepunha ao resto do mapa.
@@ -544,9 +581,23 @@ export function hydrateCanvas(raw, { id, clientId } = {}) {
      * sobrevivia ao breakpoint apagado no servidor, mas na tela o card sumia em
      * silêncio, porque a posição dependia da âncora existir. Dado invisível é
      * pior que dado ausente: ninguém conserta o que não vê.
+     *
+     * ── A exceção, e por que ela existe ──────────────────────────────────────
+     * Órfã COM CENÁRIO sobrevive, desancorada. Descartá-la apagaria de um canvas
+     * inteiro a única razão de ele existir: o cenário continuaria em disco
+     * apontando para uma oportunidade que sumiu, e a comparação viraria um mapa
+     * sem pergunta. Apagar uma aresta é um gesto de meio segundo; destruir a
+     * ligação de um cenário não pode ser efeito colateral silencioso dele.
+     *
+     * Ela não fica invisível — que é o que a regra acima combate. Aparece no
+     * mostrador marcada como "perdeu a passagem de origem", que é justamente o
+     * convite a reancorar.
      */
     oportunidades: (Array.isArray(doc.oportunidades) ? doc.oportunidades.map(hydrateOportunidade) : [])
-      .filter((op) => edges.some((e) => e.id === op.arestaId)),
+      .filter((op) => op.cenarioId || edges.some((e) => e.id === op.arestaId))
+      .map((op) => (edges.some((e) => e.id === op.arestaId)
+        ? op
+        : { ...op, arestaId: null, desancorada: true })),
     zoom: Number(doc.zoom) || 1,
     panOffset: doc.panOffset && typeof doc.panOffset === 'object' ? doc.panOffset : { x: 100, y: 100 },
     nextNodeId: Number.isInteger(doc.nextNodeId) ? doc.nextNodeId : 1,
