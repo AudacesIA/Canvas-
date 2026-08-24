@@ -1753,7 +1753,13 @@ viewport.addEventListener('drop', (e) => {
 });
 
 // 7. AI AUDITOR ENGINE (CALCULATED ANALYZER)
-btnAudit.addEventListener('click', runAiAudit);
+btnAudit.addEventListener('click', () => {
+  if (auditModal.classList.contains('open')) {
+    auditModal.classList.remove('open');
+  } else {
+    runAiAudit();
+  }
+});
 btnReAudit.addEventListener('click', runAiAudit);
 closeAuditBtn.addEventListener('click', () => auditModal.classList.remove('open'));
 
@@ -2268,6 +2274,9 @@ function applyCanvasState(data, opts = {}) {
   window.AudasysBreakpoints?.renderTodos?.();
   window.AudasysOportunidades?.renderTodos?.();
 
+  window.currentCanvasDerivadoDe = data.derivadoDe || null;
+  updateCenarioHeaderUI(data);
+
   updateViewport();
   updateConnections();
   applyAreaFilter();
@@ -2278,12 +2287,63 @@ function applyCanvasState(data, opts = {}) {
   return { applied: true };
 }
 
+function updateCenarioHeaderUI(data) {
+  const widget = document.getElementById('header-cenario-widget');
+  const btnListar = document.getElementById('btn-listar-cenarios-topo');
+  const badgeCount = document.getElementById('cenarios-count-badge');
+  if (!widget) return;
+
+  if (data?.derivadoDe) {
+    widget.style.display = 'flex';
+    if (btnListar) btnListar.style.display = 'none';
+
+    const posturaEl = document.getElementById('header-cenario-postura');
+    const premissaEl = document.getElementById('header-cenario-premissa');
+    if (posturaEl) posturaEl.textContent = (data.derivadoDe.postura || 'Realista').toUpperCase();
+    if (premissaEl) premissaEl.textContent = data.derivadoDe.premissa || 'Cenário Simulado';
+  } else {
+    widget.style.display = 'none';
+    if (btnListar) {
+      btnListar.style.display = '';
+      if (activeClientId && activeCanvasId) {
+        Audasys.api.listarCenarios(activeClientId, activeCanvasId).then(({ cenarios }) => {
+          if (badgeCount) {
+            badgeCount.textContent = cenarios.length;
+            badgeCount.style.display = cenarios.length > 0 ? 'inline-block' : 'none';
+          }
+        }).catch(() => {});
+      }
+    }
+  }
+}
+
 document.getElementById('btn-add-note').addEventListener('click', () => {
   const rect = viewport.getBoundingClientRect();
   const x = (rect.width / 2 - panOffset.x) / zoom - 100;
   const y = (rect.height / 2 - panOffset.y) / zoom - 60;
   createNote(x, y);
 });
+
+// Cenários no Topo
+document.getElementById('btn-comparar-cenario-topo')?.addEventListener('click', () => {
+  if (activeClientId && activeCanvasId && window.AudasysComparador) {
+    window.AudasysComparador.toggleModalComparador(activeClientId, activeCanvasId);
+  }
+});
+
+document.getElementById('btn-voltar-processo-base')?.addEventListener('click', () => {
+  if (window.currentCanvasDerivadoDe?.canvasId) {
+    openCanvas(window.currentCanvasDerivadoDe.canvasId);
+  }
+});
+
+document.getElementById('btn-listar-cenarios-topo')?.addEventListener('click', () => {
+  if (activeClientId && activeCanvasId && window.AudasysComparador) {
+    window.AudasysComparador.toggleListaCenarios(activeClientId, activeCanvasId);
+  }
+});
+
+window.openCanvas = openCanvas;
 
 // Global actions binding
 // O salvamento é automático; o botão força a descarga imediata da fila.
@@ -2974,11 +3034,13 @@ async function refreshHome() {
 
 /** Em qual empresa vive um canvas. */
 function clientOfCanvas(canvasId) {
-  for (const folder of homeCache.folders) {
+  for (const folder of homeCache?.folders || []) {
     if ((folder.canvases || []).some(c => c.id === canvasId)) return folder.id;
   }
-  return null;
+  return activeClientId || window.activeClientId || null;
 }
+
+window.clientOfCanvas = clientOfCanvas;
 
 const genId = (prefix) => Audasys.genId(prefix);
 
@@ -3274,7 +3336,13 @@ async function createCanvas(folderId, name) {
 }
 
 async function openCanvas(canvasId) {
-  const clientId = clientOfCanvas(canvasId);
+  let clientId = clientOfCanvas(canvasId) || activeClientId || window.activeClientId;
+  if (!clientId) {
+    try {
+      await refreshHome();
+      clientId = clientOfCanvas(canvasId) || activeClientId || window.activeClientId;
+    } catch (e) {}
+  }
   if (!clientId) { reportError('abrir o canvas', new Error('Empresa do canvas não encontrada')); return; }
 
   try {
@@ -3283,6 +3351,8 @@ async function openCanvas(canvasId) {
 
     activeCanvasId = canvasId;
     activeClientId = clientId;
+    window.activeCanvasId = canvasId;
+    window.activeClientId = clientId;
     childContext = null;
     // A sessão de escrita precisa existir antes de qualquer render: o app
     // dispara saveToLocalStorage() em vários pontos da própria montagem.
@@ -3291,10 +3361,6 @@ async function openCanvas(canvasId) {
     applyCanvasState(canvas, { source: 'open' });
     showCanvasView(canvasId, canvas.name || 'Canvas');
     AudasysAgent.attach(clientId, canvasId);
-
-    // O canvas vazio fica vazio. Antes, o fluxo de demonstração era reinjetado
-    // aqui — apagar tudo e reabrir trazia a demo de volta, brigando com o que
-    // o usuário (ou o agente) tinha acabado de fazer. Agora é botão explícito.
   } catch (err) {
     reportError('abrir o canvas', err);
   }
@@ -3312,6 +3378,8 @@ async function closeCanvas() {
   nextNodeId = 1; nextNoteId = 1;
   activeCanvasId = null;
   activeClientId = null;
+  window.activeCanvasId = null;
+  window.activeClientId = null;
   childContext = null;
   await refreshHome().catch(err => console.warn('home desatualizada', err));
   showHomeView();

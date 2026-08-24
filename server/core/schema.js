@@ -427,6 +427,8 @@ export const POSTURAS = ['realista', 'otimista', 'pessimista', 'exploratorio'];
  * aceita o volume mínimo". É a diferença entre um cenário que o dono contesta na
  * reunião e um número que ele engole sem entender.
  */
+export const OPORTUNIDADE_STATUS = ['ideia', 'simulado', 'validado', 'descartado'];
+
 export function hydrateDerivadoDe(raw) {
   if (!raw || typeof raw !== 'object' || !raw.canvasId) return null;
   return {
@@ -450,6 +452,7 @@ export function hydrateDerivadoDe(raw) {
     oportunidadeId: raw.oportunidadeId ? String(raw.oportunidadeId) : null,
     premissa: String(raw.premissa ?? ''),
     postura: oneOf(raw.postura, POSTURAS, 'realista'),
+    oportunidadeId: raw.oportunidadeId ? String(raw.oportunidadeId) : null,
     criadoEm: raw.criadoEm ?? new Date().toISOString(),
   };
 }
@@ -511,6 +514,9 @@ export function hydrateOportunidade(raw, index = 0) {
     arestaId: raw?.arestaId ?? null,
     titulo: String(raw?.titulo ?? ''),
     markdown: String(raw?.markdown ?? ''),
+    /** Postura sugerida e estágio da ideia — do Hub de Oportunidades. */
+    posturaSugerida: oneOf(raw?.posturaSugerida, POSTURAS, 'realista'),
+    status: oneOf(raw?.status, OPORTUNIDADE_STATUS, 'ideia'),
     /**
      * O cenário que pré-valida esta oportunidade. Um só — a regra é 1:1.
      *

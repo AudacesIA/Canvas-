@@ -1,20 +1,8 @@
 /**
- * Oportunidades de receita.
+ * Oportunidades de receita e Hub de Hipóteses com Simulação de Cenários.
  *
- * Substituíram a camada de hipóteses. O que se via antes eram cards estruturados
- * (enunciado, intervenção, prazo, status, histórico de versões); o que se vê
- * agora é um asterisco verde na passagem e, dentro dele, blocos de anotação
- * livres em Markdown.
- *
- * A troca foi deliberada: rigor por velocidade de escrita. Oportunidade de
- * receita nasce na frente do cliente, no meio da frase — quem para para
- * preencher formulário perde a ideia.
- *
- * ── O que se vê ─────────────────────────────────────────────────────────────
- * Fechado: só o asterisco ✳ verde sobre a aresta, com "N oportunidades de
- * receita" embaixo. Aberto: os cards aparecem, ligados ao asterisco por setas
- * verdes. Escondido por padrão porque um mapa com quatro camadas ligadas ao
- * mesmo tempo vira árvore de Natal e não se apresenta para cliente.
+ * Cada oportunidade é ancorada em uma aresta (passagem de bastão) e pode
+ * originar um Cenário "E Se" operacional (Realista, Otimista, Pessimista ou Exploratório).
  */
 (function () {
   'use strict';
@@ -33,20 +21,26 @@
 
   const daAresta = (arestaId) => oportunidades.filter((o) => o.arestaId === arestaId);
 
-  /**
-   * Onde o asterisco fica na aresta.
-   *
-   * A aresta já carrega até três marcas: a barra de gargalo e a bolinha de
-   * medição, ambas no ponto médio. Empilhar a terceira no mesmo pixel tornaria
-   * as três ilegíveis — três das cinco medições reais deste projeto estão em
-   * arestas. Por isso o asterisco fica DESLOCADO do meio.
-   */
+  const POSTURA_LABELS = {
+    realista: { label: 'Realista', cor: '#3b82f6', bg: 'rgba(59,130,246,0.15)', icon: 'fa-scale-balanced' },
+    otimista: { label: 'Otimista', cor: '#10b981', bg: 'rgba(16,185,129,0.15)', icon: 'fa-arrow-trend-up' },
+    pessimista: { label: 'Pessimista', cor: '#f59e0b', bg: 'rgba(245,158,11,0.15)', icon: 'fa-shield-halved' },
+    exploratorio: { label: 'Exploratória (Benchmark)', cor: '#a855f7', bg: 'rgba(168,85,247,0.15)', icon: 'fa-rocket' },
+  };
+
+  const STATUS_LABELS = {
+    ideia: { label: 'Ideia', cor: '#94a3b8' },
+    simulado: { label: 'Simulado', cor: '#60a5fa' },
+    validado: { label: 'Validado', cor: '#34d399' },
+    descartado: { label: 'Descartado', cor: '#f87171' },
+  };
+
   function posicaoAsterisco(conn) {
     return window.pontoNaAresta?.(conn, 'oportunidade') ?? null;
   }
 
   function renderTodos() {
-    if (arrastando) return;   // não recria o card debaixo do ponteiro
+    if (arrastando) return;
     camada().innerHTML = '';
     document.querySelectorAll('.op-seta').forEach((e) => e.remove());
 
@@ -67,7 +61,6 @@
     }
   }
 
-  /** O asterisco e o contador. É tudo que se vê antes de clicar. */
   function marcaAsterisco(arestaId, quantas, pos) {
     const el = document.createElement('div');
     el.className = `op-asterisco${abertas.has(arestaId) ? ' op-aberto' : ''}`;
@@ -76,23 +69,15 @@
     el.dataset.aresta = arestaId;
     el.title = 'Oportunidades de receita nesta passagem';
     el.innerHTML = `<span class="op-glifo">✳</span>`
-      + `<span class="op-contador">${quantas} oportunidade${quantas === 1 ? '' : 's'} de receita</span>`;
+      + `<span class="op-contador">${quantas} oportunidade${quantas === 1 ? '' : 's'}</span>`;
     return el;
   }
 
-  /**
-   * Onde o card fica.
-   *
-   * Posição própria quando já foi arrastado; senão, empilha a partir do
-   * asterisco. O padrão existe para o card nascer em algum lugar razoável — a
-   * partir do primeiro arrasto, quem manda é o consultor.
-   */
   function posicaoCard(op, origem, i) {
     if (op.x != null && op.y != null) return { x: op.x, y: op.y };
-    return { x: origem.x + 70, y: origem.y - 30 + i * 104 };
+    return { x: origem.x + 70, y: origem.y - 30 + i * 115 };
   }
 
-  /** Cards revelados, ligados ao asterisco por setas verdes. */
   function abrirCards(arestaId, lista, origem) {
     lista.forEach((op, i) => {
       const pos = posicaoCard(op, origem, i);
@@ -101,12 +86,6 @@
     redesenharSetas(arestaId);
   }
 
-  /**
-   * Redesenha as setas de uma passagem.
-   *
-   * Separado do render dos cards porque durante o arrasto só as setas mudam —
-   * recriar o card no meio do movimento mataria a captura do ponteiro.
-   */
   function redesenharSetas(arestaId) {
     document.querySelectorAll(`.op-seta[data-aresta="${arestaId}"]`).forEach((e) => e.remove());
     if (!abertas.has(arestaId)) return;
@@ -124,28 +103,33 @@
     el.style.left = `${pos.x}px`;
     el.style.top = `${pos.y}px`;
     el.dataset.op = op.id;
-    const previa = (op.markdown || '').split('\n').filter((l) => l.trim())[0] || 'sem anotação';
+
+    const postura = POSTURA_LABELS[op.posturaSugerida || 'realista'] || POSTURA_LABELS.realista;
+    const status = STATUS_LABELS[op.status || 'ideia'] || STATUS_LABELS.ideia;
+    const previa = (op.markdown || '').split('\n').filter((l) => l.trim())[0] || 'Sem anotações detalhadas';
+
+    const cenarioBtn = op.cenarioId
+      ? `<button class="op-cenario-btn active" data-abrir-cenario="${op.cenarioId}" title="Abrir cenário já simulado"><i class="fa-solid fa-arrow-up-right-from-square"></i> Ver Cenário</button>`
+      : `<button class="op-cenario-btn" data-simular-op="${op.id}" title="Simular cenário operacional E Se"><i class="fa-solid fa-bolt"></i> Simular Cenário</button>`;
+
     el.innerHTML = `
+      <div class="op-card-header">
+        <span class="op-postura-badge" style="color:${postura.cor};background:${postura.bg}"><i class="fa-solid ${postura.icon}"></i> ${postura.label}</span>
+        <span class="op-status-badge" style="color:${status.cor}">${status.label}</span>
+      </div>
       <div class="op-card-titulo">${escapeHtml(op.titulo)}</div>
-      <div class="op-card-previa">${escapeHtml(previa.slice(0, 90))}</div>
-      <div class="op-card-pe">clique para abrir o bloco de notas</div>`;
+      <div class="op-card-previa">${escapeHtml(previa.slice(0, 85))}</div>
+      <div class="op-card-actions">
+        ${cenarioBtn}
+      </div>`;
     return el;
   }
 
-  /**
-   * Seta verde do asterisco até o card.
-   *
-   * Vai no mesmo `<svg>` das arestas reais, mas fora de `connections[]`: é
-   * desenho, não dado. Mesmo padrão da seta de retorno do breakpoint.
-   */
   function desenharSeta(arestaId, de, para) {
     const linha = document.createElementNS('http://www.w3.org/2000/svg', 'path');
     linha.setAttribute('class', 'op-seta');
     linha.setAttribute('data-aresta', arestaId);
 
-    // P0 é o CENTRO DO ASTERISCO, sem deslocamento. Todas as setas nascem no
-    // mesmo ponto — é isso que faz o feixe ler como uma origem só em vez de
-    // três linhas soltas passando perto.
     const alvo = { x: para.x - 4, y: para.y + 20 };
     const dx = Math.max(28, Math.abs(alvo.x - de.x) * 0.45);
     const sentido = alvo.x >= de.x ? 1 : -1;
@@ -155,20 +139,10 @@
   }
 
   // ── Arrasto ────────────────────────────────────────────────────────────────
-  /**
-   * O card se move como um nó, e as setas acompanham.
-   *
-   * Precisa distinguir clique de arrasto: o mesmo gesto abre o bloco de notas e
-   * move o card. O critério é distância — abaixo de 4px é clique, acima é
-   * movimento. Sem isso, qualquer tremida ao clicar abriria o notepad no lugar
-   * errado, ou moveria o card sem querer.
-   *
-   * O delta é dividido pelo zoom porque o card vive dentro do container
-   * transformado: 10px de tela viram 20px de canvas a 50%.
-   */
   let arrastando = null;
 
   document.addEventListener('pointerdown', (e) => {
+    if (e.target.closest('button') || e.target.closest('input') || e.target.closest('select')) return;
     const el = e.target.closest('.op-card');
     if (!el) return;
     const op = oportunidades.find((o) => o.id === el.dataset.op);
@@ -205,11 +179,10 @@
     el.classList.remove('op-arrastando');
     arrastando = null;
     if (moveu) saveToLocalStorage();
-    else abrirNotepad(op);   // não moveu: era clique
+    else abrirNotepad(op);
   });
 
   // ── Interação ──────────────────────────────────────────────────────────────
-
   document.addEventListener('click', (e) => {
     const ast = e.target.closest('.op-asterisco');
     if (ast) {
@@ -219,19 +192,130 @@
       renderTodos();
       return;
     }
+
+    const btnSimular = e.target.closest('[data-simular-op]');
+    if (btnSimular) {
+      e.stopPropagation();
+      const op = oportunidades.find((o) => o.id === btnSimular.dataset.simularOp);
+      if (op) abrirModalCriarCenario(op);
+      return;
+    }
+
+    const btnVerCenario = e.target.closest('[data-abrir-cenario]');
+    if (btnVerCenario) {
+      e.stopPropagation();
+      const cenarioId = btnVerCenario.dataset.abrirCenario;
+      if (window.openCanvas) window.openCanvas(cenarioId);
+      return;
+    }
   });
 
   /**
-   * O notepad.
-   *
-   * Duas faces: escrever (textarea cru) e ler (Markdown renderizado). A
-   * pré-visualização reaproveita `.markdown-body`, que já existia no projeto
-   * para o modal de auditoria — mesmo estilo de título, lista e código, sem
-   * inventar uma segunda gramática visual.
+   * Modal de Criação / Simulação de Cenário "E Se" a partir de uma Oportunidade.
    */
+  function abrirModalCriarCenario(op) {
+    document.getElementById('simular-cenario-modal')?.remove();
+
+    const modal = document.createElement('div');
+    modal.id = 'simular-cenario-modal';
+    modal.className = 'esc-overlay modal-overlay';
+    modal.innerHTML = `
+      <div class="modal-content" style="max-width: 540px;">
+        <button class="close-modal-btn" data-fechar-modal>&times;</button>
+        <div class="modal-header">
+          <div class="modal-title-glow" style="color:var(--accent-glow)">
+            <i class="fa-solid fa-bolt"></i> SIMULAR CENÁRIO "E SE"
+          </div>
+          <p class="modal-subtitle">Materializa esta oportunidade de receita em um fluxo de processo alternativo comparável.</p>
+        </div>
+        <div class="modal-body" style="padding: 16px 0;">
+          <div class="panel-section">
+            <label for="sc-premissa">Premissa do Cenário (A frase-guia):</label>
+            <input type="text" id="sc-premissa" value="${escapeHtml(op.titulo)}" placeholder="Ex: Terceirizar logística Sul com base em MG" style="width:100%;margin-top:6px;padding:8px 12px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.15);border-radius:6px;color:#fff;">
+          </div>
+          <div class="panel-section" style="margin-top:14px;">
+            <label for="sc-postura">Postura da Simulação:</label>
+            <select id="sc-postura" style="width:100%;margin-top:6px;padding:8px 12px;background:rgba(15,23,42,0.9);border:1px solid rgba(255,255,255,0.15);border-radius:6px;color:#fff;">
+              <option value="realista" ${op.posturaSugerida === 'realista' ? 'selected' : ''}>🟦 Realista — Ajustes em rotina e capacidade atual</option>
+              <option value="otimista" ${op.posturaSugerida === 'otimista' ? 'selected' : ''}>🟩 Otimista — Eliminação direta de gargalos e handoffs</option>
+              <option value="pessimista" ${op.posturaSugerida === 'pessimista' ? 'selected' : ''}>🟨 Pessimista — Restrição severa de custo ou fornecedor</option>
+              <option value="exploratorio" ${op.posturaSugerida === 'exploratorio' ? 'selected' : ''}>🟪 Exploratória — Benchmarks distantes / Automação de ponta (Braço Robótico)</option>
+            </select>
+          </div>
+          <div class="panel-section" style="margin-top:14px;">
+            <label for="sc-nome">Nome do Canvas Derivado (Opcional):</label>
+            <input type="text" id="sc-nome" placeholder="Cenário: ${escapeHtml(op.titulo)}" style="width:100%;margin-top:6px;padding:8px 12px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.15);border-radius:6px;color:#fff;">
+          </div>
+        </div>
+        <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:16px;border-top:1px solid rgba(255,255,255,0.08);padding-top:14px;">
+          <button class="header-btn" data-fechar-modal>Cancelar</button>
+          <button class="audit-btn" id="btn-executar-criacao-cenario" style="margin:0;"><span class="audit-btn-inner"><i class="fa-solid fa-wand-magic-sparkles"></i> Criar e Abrir Cenário</span></button>
+        </div>
+      </div>`;
+
+    document.body.appendChild(modal);
+
+    modal.addEventListener('click', async (e) => {
+      if (e.target.closest('[data-fechar-modal]') || e.target === modal) {
+        modal.remove();
+        return;
+      }
+      if (e.target.closest('#btn-executar-criacao-cenario')) {
+        const premissa = modal.querySelector('#sc-premissa').value.trim();
+        const postura = modal.querySelector('#sc-postura').value;
+        const nome = modal.querySelector('#sc-nome').value.trim() || undefined;
+
+        if (!premissa) {
+          alert('Por favor, informe a premissa do cenário.');
+          return;
+        }
+
+        const btn = modal.querySelector('#btn-executar-criacao-cenario');
+        btn.disabled = true;
+        btn.innerHTML = '<span class="audit-btn-inner"><i class="fa-solid fa-spinner fa-spin"></i> Criando Cenário...</span>';
+
+        try {
+          /**
+           * Descarrega o autosave antes de forkar.
+           *
+           * O fork lê o canvas EM DISCO. Uma oportunidade escrita há menos de
+           * 800ms ainda está no debounce, e o servidor recusaria com "não existe
+           * oportunidade" — erro que não reproduz testando devagar e acontece
+           * na frente do cliente. `flush()` só resolve quando o disco tem o dado.
+           */
+          await Audasys.persistence.flush();
+
+          const { canvas: cenario } = await Audasys.api.criarCenario(activeClientId, activeCanvasId, {
+            nome,
+            premissa,
+            postura,
+            oportunidadeId: op.id,
+          });
+
+          op.cenarioId = cenario.id;
+          op.status = 'simulado';
+          op.posturaSugerida = postura;
+          saveToLocalStorage();
+          renderTodos();
+
+          modal.remove();
+          if (window.openCanvas) window.openCanvas(cenario.id);
+        } catch (err) {
+          alert(`Falha ao criar cenário: ${err.message}`);
+          btn.disabled = false;
+          btn.innerHTML = '<span class="audit-btn-inner"><i class="fa-solid fa-wand-magic-sparkles"></i> Criar e Abrir Cenário</span>';
+        }
+      }
+    });
+  }
+
+  /** O notepad expandido */
   function abrirNotepad(op) {
     if (!op) return;
     document.getElementById('op-notepad')?.remove();
+
+    const postura = op.posturaSugerida || 'realista';
+    const status = op.status || 'ideia';
 
     const box = document.createElement('div');
     box.id = 'op-notepad';
@@ -244,12 +328,32 @@
         <button class="op-np-aba" data-aba="ler">ler</button>
         <button class="bp-pop-fechar" data-fechar-np>✕</button>
       </div>
+      <div class="op-np-meta-bar" style="display:flex;gap:8px;padding:8px 14px;background:rgba(0,0,0,0.2);border-bottom:1px solid rgba(255,255,255,0.06);align-items:center;">
+        <span style="font-size:11px;color:#94a3b8;">Postura:</span>
+        <select id="op-np-postura" style="font-size:12px;padding:2px 8px;background:#1e293b;color:#f8fafc;border:1px solid #334155;border-radius:4px;">
+          <option value="realista" ${postura === 'realista' ? 'selected' : ''}>Realista</option>
+          <option value="otimista" ${postura === 'otimista' ? 'selected' : ''}>Otimista</option>
+          <option value="pessimista" ${postura === 'pessimista' ? 'selected' : ''}>Pessimista</option>
+          <option value="exploratorio" ${postura === 'exploratorio' ? 'selected' : ''}>Exploratória (Benchmark)</option>
+        </select>
+        <span style="font-size:11px;color:#94a3b8;margin-left:6px;">Status:</span>
+        <select id="op-np-status" style="font-size:12px;padding:2px 8px;background:#1e293b;color:#f8fafc;border:1px solid #334155;border-radius:4px;">
+          <option value="ideia" ${status === 'ideia' ? 'selected' : ''}>Ideia</option>
+          <option value="simulado" ${status === 'simulado' ? 'selected' : ''}>Simulado</option>
+          <option value="validado" ${status === 'validado' ? 'selected' : ''}>Validado</option>
+          <option value="descartado" ${status === 'descartado' ? 'selected' : ''}>Descartado</option>
+        </select>
+      </div>
       <textarea id="op-np-texto" placeholder="## Onde está o dinheiro&#10;&#10;79 pedidos/mês com endereço errado.&#10;- ticket médio **R$ 180**">${escapeHtml(op.markdown || '')}</textarea>
       <div id="op-np-previa" class="markdown-body" style="display:none"></div>
       <div class="op-np-pe">
         <button class="arb-btn danger" data-excluir-op>Excluir</button>
-        <span class="op-np-dica">salva ao fechar</span>
-        <button class="arb-btn primary" data-salvar-np>Salvar</button>
+        <div style="display:flex;gap:6px;align-items:center;">
+          ${op.cenarioId
+            ? `<button class="arb-btn" style="background:#2563eb;color:#fff;" data-abrir-cenario="${op.cenarioId}"><i class="fa-solid fa-arrow-up-right-from-square"></i> Ver Cenário</button>`
+            : `<button class="arb-btn" style="background:#059669;color:#fff;" data-simular-op="${op.id}"><i class="fa-solid fa-bolt"></i> Simular Cenário</button>`}
+          <button class="arb-btn primary" data-salvar-np>Salvar</button>
+        </div>
       </div>`;
     document.body.appendChild(box);
     box.addEventListener('pointerdown', (e) => e.stopPropagation());
@@ -262,6 +366,8 @@
 
     const salvar = () => {
       op.titulo = box.querySelector('#op-np-titulo').value.trim() || 'Sem título';
+      op.posturaSugerida = box.querySelector('#op-np-postura').value;
+      op.status = box.querySelector('#op-np-status').value;
       op.markdown = texto.value;
       saveToLocalStorage();
       renderTodos();
@@ -289,17 +395,31 @@
         box.remove();
         saveToLocalStorage();
         renderTodos();
+        return;
+      }
+      if (e.target.closest('[data-simular-op]')) {
+        salvar();
+        box.remove();
+        abrirModalCriarCenario(op);
+        return;
+      }
+      if (e.target.closest('[data-abrir-cenario]')) {
+        salvar();
+        box.remove();
+        if (window.openCanvas) window.openCanvas(op.cenarioId);
       }
     });
   }
 
-  /** Cria a partir do menu da aresta e já abre o bloco para escrever. */
   function novaNaAresta(conn) {
     const nova = {
       id: `op_${Date.now()}_${oportunidades.length}`,
       arestaId: conn.id,
       titulo: 'Oportunidade de receita',
       markdown: '',
+      posturaSugerida: 'realista',
+      status: 'ideia',
+      cenarioId: null,
       criadoEm: new Date().toISOString(),
     };
     oportunidades.push(nova);
@@ -310,7 +430,7 @@
   }
 
   /**
-   * O mostrador: uma linha por oportunidade, com o cenário que a pré-valida.
+   * O Hub: uma linha por oportunidade, com o cenário que a pré-valida.
    *
    * ── Por que a contagem não pode divergir ────────────────────────────────────
    * A regra é um cenário por oportunidade. A forma de garantir isso não é somar
@@ -344,7 +464,7 @@
      */
     let pareamento = null;
     try {
-      pareamento = await Audasys.api.cenarios(activeClientId, activeCanvasId);
+      pareamento = await Audasys.api.listarCenarios(activeClientId, activeCanvasId);
     } catch (err) {
       console.warn('[oportunidades] pareamento indisponível:', err.message);
     }
@@ -378,20 +498,28 @@
     ov.innerHTML = `
       <div class="qd-box">
         <div class="esc-head">
-          <div><b>Oportunidades de receita</b>
+          <div><b>Hub de Oportunidades de Receita</b>
             <div class="agd-sub">${cabecalho}</div></div>
           <button class="agd-close" data-fechar-lista>✕</button>
         </div>
         ${orfaos}
-        <div class="op-lista">${linhas.map(({ oportunidade: o, cenario }) => `
+        <div class="op-lista">${linhas.map(({ oportunidade: o, cenario }) => {
+          const postura = POSTURA_LABELS[o.posturaSugerida || 'realista'] || POSTURA_LABELS.realista;
+          const status = STATUS_LABELS[o.status || 'ideia'] || STATUS_LABELS.ideia;
+          return `
           <div class="op-lista-item${o.desancorada ? ' op-desancorada' : ''}">
+            <div class="op-lista-topo">
+              <span class="op-postura-badge" style="color:${postura.cor};background:${postura.bg}"><i class="fa-solid ${postura.icon}"></i> ${postura.label}</span>
+              <span class="op-status-badge" style="color:${status.cor}">${status.label}</span>
+            </div>
             <div class="op-lista-cabeca">
               <div class="op-card-titulo" data-abrir-op="${o.id}">${escapeHtml(o.titulo)}</div>
               ${selo(cenario, o)}
             </div>
             <div class="op-lista-onde" data-abrir-op="${o.id}">${escapeHtml(ondeFica(o))}</div>
             <div class="markdown-body op-lista-corpo" data-abrir-op="${o.id}">${AudasysMarkdown.render(o.markdown || '_sem anotação_')}</div>
-          </div>`).join('') || '<div class="qd-vazia">Nada mapeado ainda. Clique numa passagem do processo e use "Mapear oportunidade de receita".</div>'}
+          </div>`;
+        }).join('') || '<div class="qd-vazia">Nada mapeado ainda. Clique numa passagem do processo e use "Mapear oportunidade de receita".</div>'}
         </div>
       </div>`;
 
@@ -402,7 +530,11 @@
       if (cenarioId) { ov.remove(); return openCanvas(cenarioId); }
 
       const gerar = e.target.closest('[data-gerar-cenario]')?.dataset.gerarCenario;
-      if (gerar) return gerarCenario(gerar, ov);
+      if (gerar) {
+        const op = oportunidades.find((o) => o.id === gerar);
+        if (op) { ov.remove(); abrirModalCriarCenario(op); }
+        return;
+      }
 
       const id = e.target.closest('[data-abrir-op]')?.dataset.abrirOp;
       if (!id) return;
@@ -411,41 +543,13 @@
     });
   }
 
-  /**
-   * Cria o cenário que testa uma oportunidade.
-   *
-   * Pede a premissa porque o servidor a exige, e ele a exige por um motivo que
-   * vale repetir na tela: sem a frase que originou o desenho, ninguém contesta o
-   * mapa seis semanas depois. A postura acompanha, e não é multiplicador — é uma
-   * premissa mais dura escrita por extenso.
-   */
-  async function gerarCenario(oportunidadeId, ov) {
-    const op = oportunidades.find((o) => o.id === oportunidadeId);
-    if (!op) return;
-
-    const premissa = prompt(
-      `Cenário para "${op.titulo}".\n\n`
-      + 'Qual a premissa? A frase que origina o desenho — "e se a frota fosse dividida entre '
-      + 'MG e uma transportadora no Sul?". É o que permite contestar o mapa depois.');
-    if (!premissa || !premissa.trim()) return;
-
-    // Salva antes de forkar: o cenário nasce de uma cópia do que está EM DISCO, e
-    // uma oportunidade recém-escrita ainda pode estar no debounce de 800ms.
-    await Audasys.persistence.flush();
-
-    try {
-      const { canvas } = await Audasys.api.criarCenario(activeClientId, activeCanvasId, {
-        premissa: premissa.trim(),
-        oportunidadeId,
-      });
-      ov?.remove();
-      openCanvas(canvas.id);
-    } catch (err) {
-      alert(`Não foi possível criar o cenário.\n\n${err.message}`);
-    }
+  function toggleLista() {
+    const existing = document.getElementById('op-lista-overlay');
+    if (existing) { existing.remove(); return; }
+    abrirLista();
   }
 
-  document.getElementById('btn-oportunidades')?.addEventListener('click', abrirLista);
+  document.getElementById('btn-oportunidades')?.addEventListener('click', toggleLista);
 
-  window.AudasysOportunidades = { renderTodos, novaNaAresta, abrirNotepad, abrirLista };
+  window.AudasysOportunidades = { renderTodos, novaNaAresta, abrirNotepad, abrirLista, toggleLista, abrirModalCriarCenario };
 })();

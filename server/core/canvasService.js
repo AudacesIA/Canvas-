@@ -137,7 +137,7 @@ export class CanvasService {
    * Cenário de cenário é recusado. Um fork de fork perde a referência ao que a
    * operação realmente faz, e a comparação deixa de significar alguma coisa.
    */
-  async criarCenario(clientId, canvasId, { nome, premissa, postura = 'realista', oportunidadeId }) {
+  async criarCenario(clientId, canvasId, { nome, premissa, postura = 'realista', oportunidadeId } = {}) {
     const base = await this.getCanvas(clientId, canvasId);
     if (base.derivadoDe) {
       throw httpError(409,
@@ -156,7 +156,9 @@ export class CanvasService {
      *
      * A sequência da consultoria é gargalo → oportunidade → cenário que a
      * pré-valida → comparação. Um cenário sem oportunidade é um desenho sem
-     * pergunta: dá para navegar e não dá para decidir nada com ele.
+     * pergunta: dá para navegar e não dá para decidir nada com ele. É também o
+     * que mantém o Hub honesto: lá a contagem de cenários sai da lista de
+     * oportunidades, e um cenário solto não teria linha onde aparecer.
      */
     if (!oportunidadeId) {
       throw httpError(422,
@@ -189,7 +191,7 @@ export class CanvasService {
        */
       seed: strip({
         ...base,
-        oportunidades: base.oportunidades.map((o) => ({ ...o, cenarioId: null })),
+        oportunidades: base.oportunidades.map((o) => ({ ...o, cenarioId: null, status: o.status })),
       }),
       derivadoDe: {
         canvasId: base.id,
@@ -200,18 +202,22 @@ export class CanvasService {
     });
 
     /**
-     * Grava a ponta de volta no canvas real.
+     * Grava a ponta de volta no canvas real, e move a oportunidade para
+     * "simulado" — é o estágio que o Hub lê para saber o que já foi testado.
      *
-     * Sem `expectedRev`: o consultor pode estar digitando no canvas base neste
-     * instante, e recusar o vínculo por causa de um rev que avançou entre a
-     * leitura e a escrita transformaria uma corrida benigna em erro. O campo é
-     * escrito num objeto que só este método toca.
+     * Relê o canvas em vez de usar o `base` de cima: entre a leitura e aqui
+     * houve uma escrita (a criação do fork) e o consultor pode ter digitado.
+     *
+     * `vinculoDeCenario` é obrigatório. Sem ele a guarda do `saveCanvas` relê o
+     * `cenarioId` do disco e reimpõe o valor antigo por cima — a guarda existe
+     * para o autosave do navegador não apagar o vínculo, e bloquearia
+     * justamente a escrita que ela protege.
      */
     const atual = await this.getCanvas(clientId, canvasId);
     const doc = {
       ...atual,
       oportunidades: atual.oportunidades.map((o) => (
-        o.id === oportunidadeId ? { ...o, cenarioId: cenario.id } : o
+        o.id === oportunidadeId ? { ...o, cenarioId: cenario.id, status: 'simulado' } : o
       )),
     };
     await this.saveCanvas(clientId, canvasId, doc, { backupTag: 'cenario', vinculoDeCenario: true });
@@ -282,6 +288,15 @@ export class CanvasService {
     return {
       canvasId: base.id,
       canvasNome: base.name,
+      /**
+       * Lista plana, ao lado do pareamento.
+       *
+       * O Hub e o comparador desestruturam `{ cenarios }` desta rota. O
+       * pareamento é a forma que impede a contagem de divergir, mas remover a
+       * lista quebraria duas telas por um ganho nenhum — as duas saem do mesmo
+       * dado, e quem precisa de contagem usa o pareamento.
+       */
+      cenarios,
       oportunidades: linhas,
       total: linhas.length,
       comCenario: linhas.filter((l) => l.cenario).length,

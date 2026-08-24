@@ -73,21 +73,22 @@
     moveCanvas: (clientId, canvasId, toClientId) =>
       request('POST', `/api/clients/${clientId}/canvases/${canvasId}/move`, { body: { toClientId } }),
 
-    // --- cenário "e se" ---
-    /** Uma linha por oportunidade, com o cenário dela ou `null`. */
-    cenarios: (clientId, canvasId) =>
-      request('GET', `/api/clients/${clientId}/canvases/${canvasId}/cenarios`),
-    criarCenario: (clientId, canvasId, body) =>
-      request('POST', `/api/clients/${clientId}/canvases/${canvasId}/cenarios`, { body }),
-    /** `canvasId` aqui é o do CENÁRIO, não o do processo real. */
-    comparar: (clientId, canvasId) =>
-      request('GET', `/api/clients/${clientId}/canvases/${canvasId}/comparar`),
-
     putCanvas: (clientId, canvasId, data, rev) =>
       request('PUT', `/api/clients/${clientId}/canvases/${canvasId}`, {
         body: data,
         headers: rev === null || rev === undefined ? {} : { 'If-Match': String(rev) },
       }),
+
+    // --- cenário "e se" ---
+    criarCenario: (clientId, canvasId, { nome, premissa, postura, oportunidadeId }) =>
+      request('POST', `/api/clients/${clientId}/canvases/${canvasId}/cenarios`, {
+        body: { nome, premissa, postura, oportunidadeId },
+      }),
+    /** Devolve `{ cenarios, oportunidades, total, comCenario, semCenario, orfaos }`. */
+    listarCenarios: (clientId, canvasId) =>
+      request('GET', `/api/clients/${clientId}/canvases/${canvasId}/cenarios`),
+    compararCenario: (clientId, canvasId) =>
+      request('GET', `/api/clients/${clientId}/canvases/${canvasId}/comparar`),
   };
 
   // --- estado da sessão de escrita ---------------------------------------

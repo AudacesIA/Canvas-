@@ -485,6 +485,51 @@ server.registerTool(
 );
 
 server.registerTool(
+  'simular_cenario',
+  {
+    title: 'Simular cenário operacional completo',
+    description:
+      'Cria um cenário "e se", aplica imediatamente um lote de alterações propostas e devolve o comparativo '
+      + 'estrutural contra o processo real. Use para responder rápido a perguntas do tipo '
+      + '"como ficaria o processo se terceirizássemos o frete Sul?".',
+    inputSchema: {
+      clientId: z.string(),
+      canvasId: z.string().describe('Id do canvas do processo REAL'),
+      premissa: z.string().describe('Premissa do cenário'),
+      postura: z.enum(['realista', 'otimista', 'pessimista', 'exploratorio']).optional(),
+      oportunidadeId: z.string().optional(),
+      nome: z.string().optional(),
+      ops: z.array(opShape).optional().describe('Operações estruturais a aplicar no cenário'),
+      rationale: z.string().optional().describe('Por que estas alterações'),
+    },
+  },
+  guard(async ({ clientId, canvasId, premissa, postura = 'realista', oportunidadeId, nome, ops = [], rationale = '' }) => {
+    const { canvas: cenario } = await client.criarCenario(clientId, canvasId, { premissa, postura, oportunidadeId, nome });
+    let changesetInfo = '';
+    if (ops.length > 0) {
+      const prop = await client.propose(clientId, cenario.id, {
+        title: `Simulação: ${premissa}`,
+        rationale: rationale || `Aplicação automática de simulação para o cenário "${premissa}"`,
+        ops,
+        replace: true,
+      });
+      await client.resolveChangeset(clientId, prop.changeset.id, {
+        accept: prop.changeset.ops.map((o) => o.opId || o.id),
+      });
+      changesetInfo = `\nAlterações estruturais aplicadas com sucesso (${ops.length} operações).`;
+    }
+    const comp = await client.comparar(clientId, cenario.id);
+    return text(
+      `🎯 Simulação criada com sucesso!\n`
+      + `Cenário: ${cenario.id} "${cenario.name}" [${cenario.derivadoDe.postura}]\n`
+      + `Premissa: ${cenario.derivadoDe.premissa}${changesetInfo}\n\n`
+      + `--- IMPACTO ESTRUTURAL (Comparação As-Is vs To-Be) ---\n`
+      + comp.texto
+    );
+  }),
+);
+
+server.registerTool(
   'get_cenarios',
   {
     title: 'Cenários de um processo',
