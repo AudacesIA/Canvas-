@@ -60,10 +60,16 @@ export const client = {
     request('POST', `/api/clients/${clientId}/canvases/${canvasId}/layout`, body),
   validate: (clientId, canvasId) =>
     request('GET', `/api/clients/${clientId}/canvases/${canvasId}/validate`),
+  // Mapa de Processos versionado dentro do canvas.
   salvarMapa: (clientId, canvasId, body) =>
     request('POST', `/api/clients/${clientId}/canvases/${canvasId}/salvar-mapa`, body),
   versoesMapa: (clientId, canvasId) =>
     request('GET', `/api/clients/${clientId}/canvases/${canvasId}/versoes-mapa`),
   markdown: (clientId, canvasId) =>
     request('GET', `/api/clients/${clientId}/canvases/${canvasId}/markdown`),
+  // Entregáveis .md gravados como arquivo (docService.js).
+  gerarMapa: (clientId, canvasId) =>
+    request('POST', `/api/clients/${clientId}/canvases/${canvasId}/docs/mapa`),
+  gerarComparacao: (clientId, canvasId, body) =>
+    request('POST', `/api/clients/${clientId}/canvases/${canvasId}/docs/comparacao`, body),
 };

@@ -1,0 +1,50 @@
+<!doctype html><title>resp</title><body><pre id="o">…</pre>
+<iframe id="f" src="/" style="position:fixed;left:-5000px;border:0"></iframe>
+<script>
+const L=[];const log=s=>L.push(s);
+const until=async(f,ms=8000)=>{const t=Date.now();while(Date.now()-t<ms){try{if(await f())return true;}catch{}await new Promise(r=>setTimeout(r,100));}return false;};
+const api=async(m,p,b)=>{const r=await fetch(p,{method:m,headers:{'Content-Type':'application/json'},body:b?JSON.stringify(b):undefined});const j=await r.json().catch(()=>({}));if(!r.ok)throw new Error(j.error||r.status);return j;};
+(async()=>{let cid;try{
+ const {client}=await api('POST','/api/clients',{name:'ZZ Resp '+Date.now()}); cid=client.id;
+ const {canvas}=await api('POST',`/api/clients/${cid}/canvases`,{name:'R'});
+ await api('PUT',`/api/clients/${cid}/canvases/${canvas.id}`,{
+  nodes:[{id:'n1',name:'Embalar café',type:'action',owner:'Fábrica',x:80,y:180},
+         {id:'n2',name:'Coletar na doca',type:'action',owner:'Transportadora',x:420,y:180}],
+  connections:[{id:'c1',from:'n1',to:'n2'}],oportunidades:[],breakpoints:[],notes:[]});
+ const f=document.getElementById('f');
+ for(const [w,h] of [[1920,1080],[1440,900],[1280,800],[1024,768],[900,700],[768,1024]]){
+   f.style.width=w+'px'; f.style.height=h+'px';
+   if(!f.contentWindow.openCanvas){ f.src='/'; await until(()=>f.contentDocument.readyState==='complete'&&f.contentWindow.openCanvas); }
+   const W=f.contentWindow,D=f.contentDocument;
+   await new Promise(r=>setTimeout(r,350));
+   await W.openCanvas(canvas.id).catch(()=>{});
+   await until(()=>D.querySelectorAll('.canvas-node').length===2,4000);
+   // abre o painel de propriedades (o elemento mais largo da tela)
+   W.selectNode('n1'); await new Promise(r=>setTimeout(r,250));
+   const body=D.body, de=D.documentElement;
+   const overflowX = Math.max(body.scrollWidth, de.scrollWidth) - w;
+   const painel=D.getElementById('properties-panel');
+   const pr=painel?painel.getBoundingClientRect():null;
+   const header=D.querySelector('.app-header, header');
+   const hr=header?header.getBoundingClientRect():null;
+   const paleta=D.querySelector('.node-palette, .palette');
+   const pal=paleta?paleta.getBoundingClientRect():null;
+   const vp=D.getElementById('canvas-viewport')?.getBoundingClientRect();
+   log(`${String(w).padStart(4)}×${h}  overflowX=${overflowX>0?'+'+overflowX+'px ⚠':'0'}`
+     +`  painel=${pr?Math.round(pr.width)+'px @'+Math.round(pr.left):'—'}`
+     +`  paleta=${pal?Math.round(pal.width)+'px':'—'}`
+     +`  viewport=${vp?Math.round(vp.width)+'px':'—'}`
+     +`  sobra p/ canvas=${vp&&pr?Math.round(vp.width-pr.width):'?'}px`);
+   if(hr && hr.width>w) log(`      ⚠ header transborda: ${Math.round(hr.width)}px em ${w}px`);
+   // botões do header cabem?
+   const btns=[...D.querySelectorAll('.app-header button, header button')];
+   const fora=btns.filter(b=>{const r=b.getBoundingClientRect();return r.right>w+1||r.left<-1;});
+   if(fora.length) log(`      ⚠ ${fora.length} botão(ões) do header fora da tela: `+fora.map(b=>b.id||b.title||b.textContent.trim().slice(0,14)).join(', '));
+ }
+}catch(e){log('EXCEÇÃO: '+e.message+' @ '+(e.stack||'').split('\n')[1]);}
+if(cid){try{await api('DELETE','/api/clients/'+cid);}catch{}}
+document.getElementById('o').textContent=L.join('\n');document.title='FIM';
+await fetch('/api/_test-report',{method:'POST',headers:{'Content-Type':'application/json'},
+ body:JSON.stringify({verdict:'resp',failed:0,total:L.length,text:L.join('\n')})}).catch(()=>{});
+})();
+</script></body>

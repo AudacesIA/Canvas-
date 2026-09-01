@@ -99,11 +99,22 @@ export function registerCanvasRoutes(router, { canvasService }) {
   // --- cenário "e se": fork do processo real, com vínculo de volta ---
   router.post('/api/clients/:clientId/canvases/:canvasId/cenarios', async (req, res, { clientId, canvasId }) => {
     const { nome, premissa, postura, oportunidadeId } = await readJsonBody(req);
-    sendJson(res, 201, { canvas: await canvasService.criarCenario(clientId, canvasId, { nome, premissa, postura, oportunidadeId }) });
+    sendJson(res, 201, {
+      canvas: await canvasService.criarCenario(clientId, canvasId, {
+        nome, premissa, postura, oportunidadeId,
+      }),
+    });
   });
 
+  /**
+   * O mostrador: uma linha por oportunidade, com o cenário dela ou `null`.
+   *
+   * Devolve o pareamento em vez da lista solta de cenários porque é a resposta
+   * a "quantas das nossas ideias já foram desenhadas?" — e porque uma tela que
+   * itera esta estrutura não consegue exibir contagens divergentes.
+   */
   router.get('/api/clients/:clientId/canvases/:canvasId/cenarios', async (req, res, { clientId, canvasId }) => {
-    sendJson(res, 200, { cenarios: await canvasService.listarCenarios(clientId, canvasId) });
+    sendJson(res, 200, await canvasService.pareamentoDeCenarios(clientId, canvasId));
   });
 
   router.get('/api/clients/:clientId/canvases/:canvasId/comparar', async (req, res, { clientId, canvasId }, url) => {
@@ -142,6 +153,39 @@ export function registerCanvasRoutes(router, { canvasService }) {
   router.get('/api/clients/:clientId/canvases/:canvasId/versoes-mapa', async (req, res, { clientId, canvasId }) => {
     const versoes = await canvasService.listarVersoesMapa(clientId, canvasId);
     sendJson(res, 200, { versoes });
+  });
+
+  // --- entregáveis (.md) ---
+  /** Regenera o mapa de processos e gargalos. Idempotente: sobrescreve. */
+  router.post('/api/clients/:clientId/canvases/:canvasId/docs/mapa', async (req, res, { clientId, canvasId }) => {
+    sendJson(res, 200, await canvasService.gerarMapa(clientId, canvasId));
+  });
+
+  /** `:canvasId` é o do CENÁRIO. A narrativa vem no corpo, redigida pelo agente. */
+  router.post('/api/clients/:clientId/canvases/:canvasId/docs/comparacao', async (req, res, { clientId, canvasId }) => {
+    const { pontosFortes, pontosFracos, veredito } = await readJsonBody(req);
+    sendJson(res, 200, await canvasService.gerarComparacao(clientId, canvasId, {
+      pontosFortes, pontosFracos, veredito,
+    }));
+  });
+
+  router.get('/api/clients/:clientId/canvases/:canvasId/docs', async (req, res, { clientId, canvasId }) => {
+    sendJson(res, 200, { docs: await canvasService.listarDocs(clientId, canvasId) });
+  });
+
+  /**
+   * Devolve o Markdown cru, como texto.
+   *
+   * `text/markdown` e não JSON: o documento existe para ser lido fora da
+   * ferramenta, e um `curl` que devolve o arquivo pronto é metade do valor dele.
+   */
+  router.get('/api/clients/:clientId/canvases/:canvasId/docs/:nome', async (req, res, { clientId, canvasId, nome }) => {
+    const texto = await canvasService.lerDoc(clientId, canvasId, nome);
+    res.writeHead(200, {
+      'Content-Type': 'text/markdown; charset=utf-8',
+      'Cache-Control': 'no-store',
+    });
+    res.end(texto);
   });
 
   router.post('/api/clients/:clientId/canvases/:canvasId/duplicate', async (req, res, { clientId, canvasId }) => {

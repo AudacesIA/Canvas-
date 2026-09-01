@@ -684,27 +684,94 @@ async function until(fn, ms = 6000, step = 100) {
       outG.includes('endereço chega errado e volta'));
 
     // ══ Cenário "e se" ════════════════════════════════════════════════════
+    const cvAntesDoCenario = (await api('GET', `/api/clients/${clientId}/canvases/${canvas.id}`)).canvas;
+    const opAlvo = cvAntesDoCenario.oportunidades[0];
+    check('há oportunidade para o cenário testar', Boolean(opAlvo), opAlvo?.titulo);
+
     let semPremissa = false;
     try {
-      await api('POST', `/api/clients/${clientId}/canvases/${canvas.id}/cenarios`, { nome: 'x' });
+      await api('POST', `/api/clients/${clientId}/canvases/${canvas.id}/cenarios`,
+        { nome: 'x', oportunidadeId: opAlvo.id });
     } catch { semPremissa = true; }
     check('cenário sem premissa é recusado', semPremissa);
 
+    /**
+     * A regra que mantém as duas contagens iguais: todo cenário testa uma
+     * oportunidade. Sem isto o cenário é um desenho sem a pergunta que o
+     * originou, e o mostrador volta a poder divergir.
+     */
+    let semOportunidade = false;
+    try {
+      await api('POST', `/api/clients/${clientId}/canvases/${canvas.id}/cenarios`,
+        { premissa: 'sem dizer o que testa' });
+    } catch { semOportunidade = true; }
+    check('cenário sem oportunidadeId é recusado', semOportunidade);
+
+    let opInexistente = false;
+    try {
+      await api('POST', `/api/clients/${clientId}/canvases/${canvas.id}/cenarios`,
+        { premissa: 'x', oportunidadeId: 'op_nao_existe' });
+    } catch { opInexistente = true; }
+    check('cenário apontando para oportunidade inexistente é recusado', opInexistente);
+
     const { canvas: cen } = await api('POST', `/api/clients/${clientId}/canvases/${canvas.id}/cenarios`,
-      { premissa: 'frota própria MG→BA, Sul terceirizado', postura: 'realista' });
+      { premissa: 'frota própria MG→BA, Sul terceirizado', postura: 'realista',
+        oportunidadeId: opAlvo.id });
     check('cenário nasce com vínculo ao processo real',
       cen.derivadoDe?.canvasId === canvas.id, cen.derivadoDe?.premissa);
+    check('cenário registra QUAL oportunidade ele testa',
+      cen.derivadoDe?.oportunidadeId === opAlvo.id, cen.derivadoDe?.oportunidadeId);
     check('cenário copia o processo inteiro',
-      cen.nodes.length === (await api('GET', `/api/clients/${clientId}/canvases/${canvas.id}`)).canvas.nodes.length);
+      cen.nodes.length === cvAntesDoCenario.nodes.length);
+    check('o fork não herda ponteiro de cenário nas oportunidades copiadas',
+      cen.oportunidades.every(o => o.cenarioId === null));
+
+    const cvComVinculo = (await api('GET', `/api/clients/${clientId}/canvases/${canvas.id}`)).canvas;
+    check('a ponta de volta é gravada na oportunidade',
+      cvComVinculo.oportunidades.find(o => o.id === opAlvo.id)?.cenarioId === cen.id);
+
+    /**
+     * O autosave manda o documento INTEIRO. Uma aba aberta antes do cenário
+     * existir não tem `cenarioId` em memória — e não pode apagá-lo do disco.
+     * É a armadilha do `childCanvas` de novo, com a guarda no servidor.
+     */
+    await api('PUT', `/api/clients/${clientId}/canvases/${canvas.id}`, {
+      ...cvComVinculo,
+      oportunidades: cvComVinculo.oportunidades.map(o => ({ ...o, cenarioId: undefined })),
+    });
+    const cvDepoisDoAutosave = (await api('GET', `/api/clients/${clientId}/canvases/${canvas.id}`)).canvas;
+    check('autosave do navegador NÃO apaga o vínculo do cenário',
+      cvDepoisDoAutosave.oportunidades.find(o => o.id === opAlvo.id)?.cenarioId === cen.id);
+
+    let segundoCenario = false;
+    try {
+      await api('POST', `/api/clients/${clientId}/canvases/${canvas.id}/cenarios`,
+        { premissa: 'outra premissa para a mesma ideia', oportunidadeId: opAlvo.id });
+    } catch { segundoCenario = true; }
+    check('segundo cenário para a MESMA oportunidade é recusado (regra 1:1)', segundoCenario);
 
     let cenarioDeCenario = false;
     try {
-      await api('POST', `/api/clients/${clientId}/canvases/${cen.id}/cenarios`, { premissa: 'fork do fork' });
+      await api('POST', `/api/clients/${clientId}/canvases/${cen.id}/cenarios`,
+        { premissa: 'fork do fork', oportunidadeId: opAlvo.id });
     } catch { cenarioDeCenario = true; }
     check('cenário de cenário é recusado (perde a referência do real)', cenarioDeCenario);
 
-    const { cenarios } = await api('GET', `/api/clients/${clientId}/canvases/${canvas.id}/cenarios`);
-    check('cenário aparece na lista do processo real', cenarios.length === 1);
+    /**
+     * O mostrador. A contagem de cenários não pode divergir da de oportunidades
+     * porque a resposta é uma linha POR OPORTUNIDADE — não existe segunda lista
+     * de onde um número diferente possa sair.
+     */
+    const par = await api('GET', `/api/clients/${clientId}/canvases/${canvas.id}/cenarios`);
+    check('mostrador devolve uma linha por oportunidade',
+      par.oportunidades.length === cvDepoisDoAutosave.oportunidades.length,
+      `${par.oportunidades.length} linhas para ${cvDepoisDoAutosave.oportunidades.length} oportunidades`);
+    check('mostrador: total = comCenario + semCenario',
+      par.total === par.comCenario + par.semCenario, `${par.total} = ${par.comCenario}+${par.semCenario}`);
+    check('mostrador pareia a oportunidade com o cenário dela',
+      par.oportunidades.find(l => l.oportunidade.id === opAlvo.id)?.cenario?.id === cen.id);
+    check('mostrador recusado sobre um cenário (o pareamento é do processo real)',
+      await (async () => { try { await api('GET', `/api/clients/${clientId}/canvases/${cen.id}/cenarios`); return false; } catch { return true; } })());
 
     // Remove um passo no cenário e confere que a comparação enxerga.
     const cvCen = (await api('GET', `/api/clients/${clientId}/canvases/${cen.id}`)).canvas;
@@ -736,6 +803,73 @@ async function until(fn, ms = 6000, step = 100) {
     try { await api('GET', `/api/clients/${clientId}/canvases/${canvas.id}/comparar`); }
     catch { compararRaiz = true; }
     check('comparar um canvas que não é cenário é recusado', compararRaiz);
+
+    // ══ Entregáveis em Markdown ═══════════════════════════════════════════
+    const mapa = await api('POST', `/api/clients/${clientId}/canvases/${canvas.id}/docs/mapa`);
+    check('mapa.md é gravado', mapa.nome === 'mapa.md' && mapa.bytes > 0, `${mapa.bytes} bytes`);
+    check('mapa traz o gargalo da PASSAGEM, não só o do passo',
+      mapa.texto.includes('endereço chega errado e volta'));
+    check('mapa traz a seção de oportunidades com o corpo', mapa.texto.includes(opAlvo.titulo));
+    /**
+     * O consultor escreve `## Onde está o dinheiro` no bloco de notas. Embutido
+     * cru, esse título vira irmão das seções do documento e o sumário desmonta.
+     */
+    check('títulos do consultor são rebaixados para caber sob a seção',
+      !/^## Onde está o dinheiro/m.test(mapa.texto));
+
+    const docMd = await fetch(`/api/clients/${clientId}/canvases/${canvas.id}/docs/mapa.md`);
+    check('mapa.md é servido como text/markdown, não JSON',
+      (docMd.headers.get('content-type') || '').includes('text/markdown'),
+      docMd.headers.get('content-type'));
+
+    const cmp = await api('POST', `/api/clients/${clientId}/canvases/${cen.id}/docs/comparacao`, {
+      pontosFortes: ['Elimina a passagem de bastão em malha aberta'],
+      pontosFracos: ['Cria dependência de um terceiro sem contrato'],
+      veredito: 'Vale testar em piloto por um trimestre.',
+    });
+    check('comparação é gravada sob o canvas do processo real',
+      cmp.canvasId === canvas.id && cmp.nome === `comparacao-${cen.id}.md`, cmp.nome);
+    check('comparação junta a metade contada e a metade redigida',
+      cmp.texto.includes('ESTRUTURA (atual → cenário)')
+      && cmp.texto.includes('Cria dependência de um terceiro sem contrato'));
+    /**
+     * A regra do comparador tem que sobreviver ao documento: onde ninguém
+     * apurou, o arquivo repete "não comparável" em vez de estimar.
+     */
+    check('o documento não inventa número onde ninguém apurou',
+      cmp.texto.includes('não comparável'));
+    check('o documento declara quem escreveu a leitura',
+      cmp.texto.includes('redigida por IA'));
+
+    let comparacaoDoReal = false;
+    try {
+      await api('POST', `/api/clients/${clientId}/canvases/${canvas.id}/docs/comparacao`, {});
+    } catch { comparacaoDoReal = true; }
+    check('gerar comparação a partir do processo real é recusado', comparacaoDoReal);
+
+    const { docs } = await api('GET', `/api/clients/${clientId}/canvases/${canvas.id}/docs`);
+    check('os dois entregáveis aparecem na listagem', docs.length === 2,
+      docs.map(d => d.nome).join(', '));
+
+    // ══ Órfã com cenário sobrevive ════════════════════════════════════════
+    /**
+     * Apagar a aresta apagava a oportunidade — e com ela a única ponta que
+     * explica por que o cenário existe. Meio segundo de gesto não pode destruir
+     * o vínculo de um canvas inteiro.
+     */
+    const cvOrfa = (await api('GET', `/api/clients/${clientId}/canvases/${canvas.id}`)).canvas;
+    await api('PUT', `/api/clients/${clientId}/canvases/${canvas.id}`, {
+      ...cvOrfa,
+      connections: cvOrfa.connections.filter(c => c.id !== opAlvo.arestaId),
+    });
+    const cvSemAresta = (await api('GET', `/api/clients/${clientId}/canvases/${canvas.id}`)).canvas;
+    const sobrevivente = cvSemAresta.oportunidades.find(o => o.id === opAlvo.id);
+    check('oportunidade COM cenário sobrevive quando a passagem some',
+      Boolean(sobrevivente), `${cvSemAresta.oportunidades.length} restante(s)`);
+    check('e sobrevive marcada como desancorada',
+      sobrevivente?.desancorada === true && sobrevivente?.arestaId === null);
+    check('o vínculo com o cenário resiste à perda da âncora',
+      sobrevivente?.cenarioId === cen.id);
 
   } catch (err) {
     check('execução sem exceção', false, err.message + ' | ' + (err.stack || '').split('\n')[1]);

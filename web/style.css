@@ -390,7 +390,6 @@ body {
 
 .trigger-color { background: rgba(16, 185, 129, 0.15); border: 1px solid var(--accent-emerald); color: var(--accent-emerald); }
 .action-color { background: rgba(59, 130, 246, 0.15); border: 1px solid var(--accent); color: var(--accent-glow); }
-.integration-color { background: rgba(168, 85, 247, 0.15); border: 1px solid var(--accent-purple); color: #c084fc; }
 .condition-color { background: rgba(245, 158, 11, 0.15); border: 1px solid var(--accent-amber); color: var(--accent-amber); }
 .output-color { background: rgba(244, 63, 94, 0.15); border: 1px solid var(--accent-rose); color: var(--accent-rose); }
 
@@ -1922,18 +1921,6 @@ body {
 }
 .rule-sub-btn:hover { color: var(--accent-glow); background: rgba(96,165,250,0.1); }
 .rule-del-btn:hover { color: var(--accent-rose); background: rgba(244,63,94,0.08); }
-.rule-label-static {
-  font-size: 11px;
-  color: var(--text-muted);
-  font-style: italic;
-}
-.rules-else-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 5px 4px;
-  margin-bottom: 8px;
-}
 .add-rule-btn {
   width: 100%;
   padding: 6px 10px;
@@ -2515,16 +2502,6 @@ body {
   border-color: var(--glass-border-hover) !important;
 }
 
-.home-canvas-name-badge {
-  font-family: 'Outfit', sans-serif;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-secondary);
-  padding: 4px 10px;
-  background: rgba(255,255,255,0.04);
-  border: 1px solid var(--glass-border);
-  border-radius: 6px;
-}
 
 /* ══════════════════════════════════════════════════════════════════════════
    PROPOSTA DO AGENTE
@@ -2856,7 +2833,6 @@ input.ev-meio, textarea.ev-meio, select.ev-meio { color: #c2c9d6; }
   border: 2px solid var(--accent-amber, #f59e0b);
 }
 .bp:hover { transform: scale(1.25); box-shadow: 0 0 10px rgba(245, 158, 11, 0.55); }
-.bp-sel { box-shadow: 0 0 0 4px rgba(245, 158, 11, 0.22); }
 
 /* O ANEL. Esta é a informação mais importante do mapa de medição: aberto
    significa que alguém coleta o número e ele não chega em ninguém que possa
@@ -2914,20 +2890,6 @@ input.ev-meio, textarea.ev-meio, select.ev-meio { color: #c2c9d6; }
 .bp-alerta { color: #f87171; }
 
 /* Botão flutuante que aparece na aresta selecionada — medir a PASSAGEM. */
-.bp-criar-aresta {
-  position: absolute;
-  transform: translateX(-50%);
-  pointer-events: auto;
-  cursor: pointer;
-  white-space: nowrap;
-  padding: 3px 9px;
-  border-radius: 999px;
-  font-size: 10px;
-  color: #fcd34d;
-  background: rgba(245, 158, 11, 0.14);
-  border: 1px dashed rgba(245, 158, 11, 0.5);
-}
-.bp-criar-aresta:hover { background: rgba(245, 158, 11, 0.28); }
 
 /* Lista de medições no painel do nó. */
 .med-item {
@@ -2948,38 +2910,17 @@ input.ev-meio, textarea.ev-meio, select.ev-meio { color: #c2c9d6; }
   color: #a5b4fc; font-size: 10px;
 }
 
-/* ── QUADRO DE HIPÓTESES ─────────────────────────────────────────────────── */
-/* O canvas responde ONDE; o quadro responde EM QUE PÉ. Mapa é péssimo para
-   mostrar movimento, e hipótese tem vida temporal. */
+/* ── CAIXA DE LISTAGEM ───────────────────────────────────────────────────── */
+/* Sobrou do quadro de hipóteses, que a oportunidade de receita substituiu. Só
+   estas duas regras seguiram vivas — a lista de oportunidades as reaproveita, e
+   é por isso que não foram embora com o resto. */
 .qd-box {
   width: min(1100px, 95vw); max-height: 88vh;
   display: flex; flex-direction: column;
   background: #0b111f; border: 1px solid var(--glass-border);
   border-radius: 14px; overflow: hidden;
 }
-.qd-corpo { display: flex; gap: 14px; padding: 16px; overflow: auto; align-items: flex-start; }
-.qd-coluna { flex: 1; min-width: 260px; }
-.qd-cabeca {
-  display: flex; justify-content: space-between; align-items: center;
-  padding: 0 4px 10px; font-size: 11px; letter-spacing: .06em;
-  text-transform: uppercase; color: #9aa3b2;
-  border-bottom: 1px solid rgba(148, 163, 184, 0.14);
-}
-.qd-cabeca span { color: #e2e8f0; font-size: 12px; }
-.qd-cards { display: flex; flex-direction: column; gap: 10px; padding-top: 10px; }
-.qd-card { position: static; width: auto; cursor: pointer; }
-.qd-card:hover { border-color: rgba(165, 180, 252, 0.7); }
 .qd-vazia { padding: 14px 4px; font-size: 11px; color: #64748b; }
-.qd-vencido { color: #f87171; font-weight: 600; }
-
-#ac-form select, #hp-form select {
-  width: 100%; box-sizing: border-box;
-  background: rgba(2, 6, 16, 0.6);
-  border: 1px solid var(--glass-border);
-  border-radius: 6px; padding: 7px 9px;
-  color: var(--text-primary, #f1f5f9);
-  font-family: 'DM Sans', sans-serif; font-size: 12px; outline: none;
-}
 
 /* ── OPORTUNIDADES DE RECEITA ────────────────────────────────────────────── */
 /* O asterisco é tudo que se vê antes de clicar. Deslocado do ponto médio de
@@ -3129,6 +3070,44 @@ input.ev-meio, textarea.ev-meio, select.ev-meio { color: #c2c9d6; }
 .op-lista-item:hover { border-color: rgba(110, 231, 183, 0.85); }
 .op-lista-onde { font-size: 10.5px; color: #9aa3b2; margin-top: 3px; }
 .op-lista-corpo { margin-top: 8px; font-size: 11.5px; }
+
+/* ── O mostrador: oportunidade e o cenário que a testa ─────────────────────── */
+/* O selo carrega o estado inteiro da linha. Verde cheio: já foi desenhado e dá
+   para abrir. Contorno tracejado: a ideia está escrita e ninguém testou ainda —
+   mesma gramática do resto do mapa, onde tracejado é sempre "falta apuração". */
+.op-lista-cabeca {
+  display: flex; align-items: flex-start; justify-content: space-between; gap: 10px;
+}
+.op-lista-cabeca .op-card-titulo { cursor: pointer; }
+.op-selo {
+  flex-shrink: 0; cursor: pointer; font-family: 'DM Sans', sans-serif;
+  font-size: 10px; border-radius: 999px; padding: 4px 10px;
+  display: inline-flex; align-items: center; gap: 6px; max-width: 260px;
+}
+.op-selo-tem {
+  background: rgba(16, 185, 129, 0.16); color: #6ee7b7;
+  border: 1px solid rgba(110, 231, 183, 0.55);
+}
+.op-selo-tem:hover { background: rgba(16, 185, 129, 0.3); }
+.op-selo-falta {
+  background: none; color: #94a3b8;
+  border: 1px dashed rgba(148, 163, 184, 0.55);
+}
+.op-selo-falta:hover { color: #6ee7b7; border-color: rgba(110, 231, 183, 0.7); }
+.op-postura {
+  font-size: 9px; text-transform: uppercase; letter-spacing: .06em; opacity: .75;
+}
+
+/* Perdeu a aresta e sobreviveu porque tem cenário. Fica visível de propósito:
+   é o convite a reancorar, não um erro a esconder. */
+.op-desancorada { border-style: dashed; opacity: .82; }
+.op-desancorada .op-lista-onde { color: #fbbf24; }
+
+.op-orfaos {
+  margin: 0 18px; padding: 10px 12px; font-size: 11px; line-height: 1.5;
+  color: #fbbf24; background: rgba(251, 191, 36, 0.08);
+  border: 1px solid rgba(251, 191, 36, 0.3); border-radius: 8px;
+}
 
 /* Formulário do ponto de medição. */
 #bp-form input, #bp-form select {
@@ -3414,5 +3393,78 @@ input.ev-meio, textarea.ev-meio, select.ev-meio { color: #c2c9d6; }
   background: rgba(255, 255, 255, 0.1);
   color: #fff;
 }
+/* ── Cenário na home ──────────────────────────────────────────────────────── */
+/* Um cenário confundido com o processo real é o pior erro que esta ferramenta
+   pode induzir: a consultoria passa a afirmar ao cliente uma operação que ele
+   não tem. O selo e a borda tracejada custam nada e tornam a troca impossível. */
+.canvas-card-cenario { border-style: dashed; border-color: rgba(165, 180, 252, 0.45); }
+.canvas-card-selo {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 9.5px; text-transform: uppercase; letter-spacing: .07em;
+  color: #a5b4fc; margin-bottom: 6px;
+}
+.canvas-card-postura {
+  padding: 1px 6px; border-radius: 999px;
+  background: rgba(165, 180, 252, 0.14); border: 1px solid rgba(165, 180, 252, 0.3);
+}
+.canvas-card-premissa {
+  font-size: 10.5px; color: #94a3b8; line-height: 1.45; margin-top: 4px;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
 
+/* ═══ Telas estreitas ═══════════════════════════════════════════════════════
+   Não é suporte a celular — ninguém mapeia um processo no telefone, e fingir
+   que sim custaria mais do que entrega. É o mínimo verificável: que nenhum
+   controle fique inalcançável num laptop.
 
+   Medido antes de escrever isto: em 1280×800 — a resolução padrão de um
+   MacBook Air 13" — o header transbordava e o botão de Auditoria ficava FORA
+   DA TELA, sem scroll que o alcançasse. Um botão que não dá para clicar é pior
+   que um ausente: o usuário sabe que existe.
+
+   Os limiares são função do NÚMERO DE BOTÕES, não de gosto. Quando o Hub e o
+   Copilot chegaram, o header passou de 7 para 9 e 1440px voltou a transbordar.
+   Mexeu no header? Rode scripts/responsivo.html — ele mede, não opina. */
+
+.app-header { gap: 12px; }
+.header-actions { flex-shrink: 1; min-width: 0; flex-wrap: nowrap; }
+.header-logo { flex-shrink: 0; min-width: 0; }
+
+@media (max-width: 1600px) {
+  :root { --properties-width: 340px; --sidebar-width: 250px; }
+  .header-actions { gap: 8px; }
+  .header-actions .header-btn { padding: 8px 12px; }
+}
+
+/* Rótulos viram ícones. `font-size: 0` apaga o texto solto do botão sem exigir
+   um <span> em volta dele; o ícone recupera o tamanho logo abaixo. Todo botão
+   do header tem `title`, então o nome continua a um hover de distância. */
+@media (max-width: 1500px) {
+  .header-actions .header-btn,
+  .header-actions .audit-btn .audit-btn-inner,
+  #btn-comparar-cenario-topo, #btn-voltar-processo-base { font-size: 0; gap: 0; }
+  .header-actions .header-btn,
+  #btn-comparar-cenario-topo, #btn-voltar-processo-base { padding: 8px 11px; }
+  .header-actions .header-btn i,
+  .header-actions .audit-btn .audit-btn-inner i,
+  #btn-comparar-cenario-topo i, #btn-voltar-processo-base i { font-size: 14px; }
+  .logo-separator, .logo-subtext { display: none; }
+}
+
+@media (max-width: 1150px) {
+  :root { --properties-width: 320px; --sidebar-width: 230px; }
+  .header-filter label { font-size: 0; }
+  .header-filter label i { font-size: 13px; }
+  .app-header { padding: 0 14px; gap: 8px; }
+  .header-actions { gap: 6px; }
+  .header-actions .header-btn { padding: 7px 9px; }
+}
+
+@media (max-width: 900px) {
+  :root { --properties-width: 300px; --sidebar-width: 210px; }
+  .app-header { padding: 0 8px; gap: 6px; }
+  .header-actions { gap: 4px; }
+  .header-actions .header-btn { padding: 6px 7px; }
+  .logo-text { font-size: 0; }
+  .header-filter select { max-width: 110px; }
+}

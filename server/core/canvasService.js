@@ -1,4 +1,6 @@
 import { hydrateCanvas, emptyCanvas } from './schema.js';
+import { compararEmTexto } from './comparador.js';
+import { mapaMarkdown, comparacaoMarkdown, nomeDaComparacao, NOME_DO_MAPA } from './docService.js';
 import { newCanvasId, slugify } from './ids.js';
 import { withLock } from './locks.js';
 import { gerarFluxoCenario } from './scenarioEngine.js';
@@ -136,7 +138,7 @@ export class CanvasService {
    * Invariante de Domínio: Empresa -> Processo -> Cenário.
    * Um cenário SÓ pode ser criado se o processo pai tiver sido salvo como "Mapa de Processos".
    */
-  async criarCenario(clientId, canvasId, { nome, premissa, postura = 'realista', oportunidadeId = null, autoPromoverMapa = true } = {}) {
+  async criarCenario(clientId, canvasId, { nome, premissa, postura = 'realista', oportunidadeId, autoPromoverMapa = true } = {}) {
     const base = await this.getCanvas(clientId, canvasId);
     if (base.derivadoDe) {
       throw httpError(409,
@@ -147,6 +149,42 @@ export class CanvasService {
       throw httpError(422,
         'Cenário exige "premissa": a frase que o originou. Sem ela, daqui a seis semanas '
         + 'ninguém consegue contestar o desenho — nem lembrar por que ele existe.');
+    }
+
+    /**
+     * Todo cenário testa UMA oportunidade de receita, e cada oportunidade tem
+     * no máximo UM cenário.
+     *
+     * A sequência da consultoria é gargalo → oportunidade → cenário que a
+     * pré-valida → comparação. Um cenário sem oportunidade é um desenho sem
+     * pergunta: dá para navegar e não dá para decidir nada com ele. É também o
+     * que mantém o Hub honesto: lá a contagem de cenários sai da lista de
+     * oportunidades, e um cenário solto não teria linha onde aparecer.
+     *
+     * Vem ANTES da trava de baseline de propósito: estas três validações só
+     * leem, e a de baseline escreve (auto-promove o mapa). Na ordem inversa, um
+     * pedido recusado por falta de `oportunidadeId` deixaria para trás uma
+     * versão de mapa que ninguém pediu.
+     */
+    if (!oportunidadeId) {
+      throw httpError(422,
+        'Cenário exige "oportunidadeId": qual oportunidade de receita ele pré-valida. '
+        + `Use get_oportunidades em "${base.name}" para escolher. Um cenário sem a `
+        + 'oportunidade que o originou é um desenho sem pergunta.');
+    }
+    const oportunidade = base.oportunidades.find((o) => o.id === oportunidadeId);
+    if (!oportunidade) {
+      throw httpError(422,
+        `Não existe oportunidade "${oportunidadeId}" em "${base.name}". `
+        + `Mapeadas: ${base.oportunidades.map((o) => `${o.id} (${o.titulo})`).join(', ') || 'nenhuma'}.`);
+    }
+    const existentes = await this.listarCenarios(clientId, canvasId);
+    const jaTem = existentes.find((c) => c.derivadoDe?.oportunidadeId === oportunidadeId);
+    if (jaTem) {
+      throw httpError(409,
+        `"${oportunidade.titulo}" já tem cenário: "${jaTem.name}". A regra é um cenário por `
+        + 'oportunidade — é o que mantém as duas contagens iguais. Edite o cenário existente, '
+        + 'ou mapeie outra oportunidade se a premissa for realmente outra.');
     }
 
     // Invariante: Processo precisa ter baseline registrado ("Mapa de Processos")
@@ -165,21 +203,30 @@ export class CanvasService {
 
     // Gera o fluxo transformado com base no mapa de processos original e na premissa
     const transformado = gerarFluxoCenario(base, { premissa, postura, oportunidadeId });
-    const seed = {
-      ...strip(base),
-      nodes: transformado.nodes,
-      connections: transformado.connections,
-    };
 
     const cenario = await this.createCanvas(clientId, {
-      name: nome || `${base.name} — ${premissa}`.slice(0, 80),
+      name: nome || oportunidade.titulo || `${base.name} — ${premissa}`.slice(0, 80),
       folderId: base.folderId,
-      seed,
+      /**
+       * O fork nasce com o fluxo TRANSFORMADO pela premissa, não com uma cópia
+       * crua do processo real — é isso que faz o cenário responder à pergunta
+       * que o originou em vez de ser um clone.
+       *
+       * E leva as oportunidades, mas não os ponteiros de cenário delas: um
+       * `cenarioId` copiado apontaria, de dentro do cenário, para um irmão — e o
+       * vínculo que importa aqui é o `derivadoDe`, não a herança de outro fork.
+       */
+      seed: strip({
+        ...base,
+        oportunidades: base.oportunidades.map((o) => ({ ...o, cenarioId: null, status: o.status })),
+        nodes: transformado.nodes,
+        connections: transformado.connections,
+      }),
       derivadoDe: {
         canvasId: base.id,
+        oportunidadeId,
         premissa: String(premissa).trim(),
         postura,
-        oportunidadeId: oportunidadeId ? String(oportunidadeId) : null,
         comparativoTexto: transformado.comparativoTexto,
         nosRemovidos: transformado.nosRemovidos,
         nosSubstituidos: transformado.nosSubstituidos,
@@ -187,19 +234,26 @@ export class CanvasService {
       },
     });
 
-    // Se nasceu de uma oportunidade de receita, amarra de volta no canvas base
-    if (oportunidadeId && Array.isArray(base.oportunidades)) {
-      const idx = base.oportunidades.findIndex((o) => o.id === oportunidadeId);
-      if (idx !== -1) {
-        const opsAtualizadas = [...base.oportunidades];
-        opsAtualizadas[idx] = {
-          ...opsAtualizadas[idx],
-          cenarioId: cenario.id,
-          status: 'simulado',
-        };
-        await this.saveCanvas(clientId, base.id, { oportunidades: opsAtualizadas });
-      }
-    }
+    /**
+     * Grava a ponta de volta no canvas real, e move a oportunidade para
+     * "simulado" — é o estágio que o Hub lê para saber o que já foi testado.
+     *
+     * Relê o canvas em vez de usar o `base` de cima: entre a leitura e aqui
+     * houve uma escrita (a criação do fork) e o consultor pode ter digitado.
+     *
+     * `vinculoDeCenario` é obrigatório. Sem ele a guarda do `saveCanvas` relê o
+     * `cenarioId` do disco e reimpõe o valor antigo por cima — a guarda existe
+     * para o autosave do navegador não apagar o vínculo, e bloquearia
+     * justamente a escrita que ela protege.
+     */
+    const atual = await this.getCanvas(clientId, canvasId);
+    const doc = {
+      ...atual,
+      oportunidades: atual.oportunidades.map((o) => (
+        o.id === oportunidadeId ? { ...o, cenarioId: cenario.id, status: 'simulado' } : o
+      )),
+    };
+    await this.saveCanvas(clientId, canvasId, doc, { backupTag: 'cenario', vinculoDeCenario: true });
 
     return cenario;
   }
@@ -244,6 +298,137 @@ export class CanvasService {
     return todos.filter((c) => c.derivadoDe?.canvasId === canvasId);
   }
 
+  /**
+   * O pareamento que a tela e o agente consomem: uma linha por OPORTUNIDADE.
+   *
+   * A contagem de cenários não pode divergir da de oportunidades, e a forma de
+   * garantir isso não é uma checagem — é não existir uma segunda lista de onde
+   * um número diferente possa sair. Quem itera aqui itera `oportunidades`; o
+   * cenário é um campo de cada linha, presente ou `null`.
+   *
+   * `orfaos` são cenários cuja oportunidade sumiu do canvas base. Não somem da
+   * resposta: um canvas em disco que ninguém consegue alcançar pela tela é
+   * exatamente o tipo de dado invisível que o resto do projeto recusa.
+   */
+  async pareamentoDeCenarios(clientId, canvasId) {
+    const base = await this.getCanvas(clientId, canvasId);
+    if (base.derivadoDe) {
+      throw httpError(422,
+        `"${base.name}" é um cenário. O pareamento vive no canvas do processo real — `
+        + `peça em "${base.derivadoDe.canvasId}".`);
+    }
+    const cenarios = await this.listarCenarios(clientId, canvasId);
+    const porOportunidade = new Map(
+      cenarios.filter((c) => c.derivadoDe?.oportunidadeId)
+        .map((c) => [c.derivadoDe.oportunidadeId, c]),
+    );
+
+    /**
+     * Conserta a deriva do cache antes de responder.
+     *
+     * `op.cenarioId` é cache; a verdade é o `derivadoDe` de cada cenário. Se os
+     * dois divergirem — cenário criado por uma versão antiga, escrita perdida
+     * numa corrida — o estrago não é cosmético: a hidratação usa o cache para
+     * decidir se uma oportunidade órfã sobrevive, e um cache vazio faz ela ser
+     * descartada junto com a única ponta do vínculo.
+     *
+     * Reparar na leitura é o que fecha essa janela, e o mostrador é o lugar
+     * certo: é a tela que o consultor abre justamente para ver o pareamento.
+     * Escrita idempotente, só quando há divergência de fato.
+     */
+    const corrigidas = base.oportunidades.map((o) => {
+      const real = porOportunidade.get(o.id)?.id ?? null;
+      return real === (o.cenarioId ?? null) ? o : { ...o, cenarioId: real };
+    });
+    if (corrigidas.some((o, i) => o !== base.oportunidades[i])) {
+      await this.saveCanvas(clientId, canvasId,
+        { ...base, oportunidades: corrigidas },
+        { vinculoDeCenario: true });
+    }
+
+    const linhas = corrigidas.map((oportunidade) => ({
+      oportunidade,
+      cenario: porOportunidade.get(oportunidade.id) ?? null,
+    }));
+    const conhecidas = new Set(corrigidas.map((o) => o.id));
+
+    return {
+      canvasId: base.id,
+      canvasNome: base.name,
+      /**
+       * Lista plana, ao lado do pareamento.
+       *
+       * O Hub e o comparador desestruturam `{ cenarios }` desta rota. O
+       * pareamento é a forma que impede a contagem de divergir, mas remover a
+       * lista quebraria duas telas por um ganho nenhum — as duas saem do mesmo
+       * dado, e quem precisa de contagem usa o pareamento.
+       */
+      cenarios,
+      oportunidades: linhas,
+      total: linhas.length,
+      comCenario: linhas.filter((l) => l.cenario).length,
+      semCenario: linhas.filter((l) => !l.cenario).length,
+      orfaos: cenarios.filter((c) => !c.derivadoDe?.oportunidadeId
+        || !conhecidas.has(c.derivadoDe.oportunidadeId)),
+    };
+  }
+
+  // --- entregáveis (.md) ---
+
+  /**
+   * Gera e grava o mapa de processos e gargalos.
+   *
+   * Sempre regenerado do canvas, nunca editado à mão: o documento é uma
+   * PROJEÇÃO do mapa, e um `.md` divergindo do canvas que ele descreve seria a
+   * pior das duas fontes de verdade — a que o cliente leva para a reunião.
+   */
+  async gerarMapa(clientId, canvasId) {
+    const canvas = await this.getCanvas(clientId, canvasId);
+    const client = await this.storage.readClient(clientId);
+    const texto = mapaMarkdown(canvas, { clienteNome: client?.name ?? null });
+    const info = await this.storage.writeDoc(clientId, canvasId, NOME_DO_MAPA, texto);
+    return { ...info, canvasId, rev: canvas.rev, texto };
+  }
+
+  /**
+   * Gera e grava a comparação real × cenário.
+   *
+   * `canvasId` é o do CENÁRIO — é ele que sabe de onde saiu. A narrativa chega
+   * pronta do agente; a estrutura é contada aqui. Ver `docService.js` para por
+   * que essa divisão não é acidental.
+   */
+  async gerarComparacao(clientId, canvasId, narrativa = {}) {
+    const cenario = await this.getCanvas(clientId, canvasId);
+    if (!cenario.derivadoDe) {
+      throw httpError(422, `"${cenario.name}" não é um cenário — não há do que comparar. `
+        + 'Gere a comparação a partir do canvas derivado, não do processo real.');
+    }
+    const base = await this.getCanvas(clientId, cenario.derivadoDe.canvasId);
+    const texto = comparacaoMarkdown(base, cenario, compararEmTexto(base, cenario), narrativa);
+
+    /**
+     * Gravada sob o canvas BASE, não sob o cenário.
+     *
+     * A comparação é um documento do processo real — é lá que o consultor
+     * procura "o que já testamos", junto do mapa. Guardá-la sob o cenário
+     * espalharia os entregáveis por um diretório por fork.
+     */
+    const info = await this.storage.writeDoc(
+      clientId, base.id, nomeDaComparacao(cenario.id), texto,
+    );
+    return { ...info, canvasId: base.id, cenarioId: cenario.id, texto };
+  }
+
+  async lerDoc(clientId, canvasId, nome) {
+    const texto = await this.storage.readDoc(clientId, canvasId, nome);
+    if (texto === null) throw httpError(404, `Documento "${nome}" não existe neste canvas.`);
+    return texto;
+  }
+
+  async listarDocs(clientId, canvasId) {
+    return this.storage.listDocs(clientId, canvasId);
+  }
+
   async moveCanvasToClient(fromClientId, canvasId, toClientId) {
     const source = await this.getCanvas(fromClientId, canvasId);
     await this.ensureClient(toClientId);
@@ -284,7 +469,7 @@ export class CanvasService {
    * O cliente responde ao 409 recarregando o estado — mais barato que CRDT e
    * suficiente para um único usuário.
    */
-  async saveCanvas(clientId, canvasId, patch, { expectedRev = null, backupTag = '' } = {}) {
+  async saveCanvas(clientId, canvasId, patch, { expectedRev = null, backupTag = '', vinculoDeCenario = false } = {}) {
     return withLock(`${clientId}/${canvasId}`, async () => {
       const current = await this.storage.readCanvas(clientId, canvasId);
       if (!current) throw httpError(404, `Canvas ${canvasId} não encontrado`);
@@ -299,10 +484,32 @@ export class CanvasService {
 
       if (backupTag) await this.storage.backupCanvas(clientId, canvasId, current, backupTag);
 
+      /**
+       * `cenarioId` é do servidor, não do navegador.
+       *
+       * O autosave manda o DOCUMENTO INTEIRO. Uma aba aberta antes de o cenário
+       * existir tem oportunidades sem `cenarioId` em memória, e o primeiro
+       * salvamento — que pode ser só o consultor arrastando um card — apagaria o
+       * vínculo do disco. Sem 409, sem log: é a mesma armadilha que o README
+       * descreve para `childCanvas`, e ela custou 15 nós da última vez.
+       *
+       * Só quem escreve este campo é `criarCenario`, e é por isso que existe o
+       * `vinculoDeCenario`: sem ele esta guarda bloquearia a própria escrita que
+       * ela existe para proteger. Para todo o resto — o autosave inclusive — o
+       * campo é relido de disco e reimposto por id, ignorando o que veio no corpo.
+       */
+      const patchCorrigido = { ...patch };
+      if (!vinculoDeCenario && Array.isArray(patch?.oportunidades)) {
+        const gravado = new Map((current.oportunidades ?? []).map((o) => [o.id, o.cenarioId ?? null]));
+        patchCorrigido.oportunidades = patch.oportunidades.map((o) => (
+          gravado.has(o.id) ? { ...o, cenarioId: gravado.get(o.id) } : o
+        ));
+      }
+
       const merged = hydrateCanvas(
         {
           ...current,
-          ...patch,
+          ...patchCorrigido,
           id: canvasId,
           clientId,
           createdAt: current.createdAt,

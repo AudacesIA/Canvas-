@@ -307,6 +307,16 @@
         btn.innerHTML = '<span class="audit-btn-inner"><i class="fa-solid fa-spinner fa-spin"></i> Criando Cenário...</span>';
 
         try {
+          /**
+           * Descarrega o autosave antes de forkar.
+           *
+           * O fork lê o canvas EM DISCO. Uma oportunidade escrita há menos de
+           * 800ms ainda está no debounce, e o servidor recusaria com "não existe
+           * oportunidade" — erro que não reproduz testando devagar e acontece
+           * na frente do cliente. `flush()` só resolve quando o disco tem o dado.
+           */
+          await Audasys.persistence.flush();
+
           const { canvas: cenario } = await Audasys.api.criarCenario(effClientId, effCanvasId, {
             nome,
             premissa,
@@ -453,50 +463,113 @@
     abrirNotepad(nova);
   }
 
-  function abrirLista() {
+  /**
+   * O Hub: uma linha por oportunidade, com o cenário que a pré-valida.
+   *
+   * ── Por que a contagem não pode divergir ────────────────────────────────────
+   * A regra é um cenário por oportunidade. A forma de garantir isso não é somar
+   * dos dois lados e comparar — é NÃO EXISTIR um segundo lado. Esta lista itera
+   * `oportunidades` e nada mais; o cenário é um campo de cada linha, presente ou
+   * ausente. Não há coleção de cenários de onde um número diferente possa sair.
+   *
+   * O servidor devolve o pareamento já montado (`GET …/cenarios`), resolvido
+   * contra os `derivadoDe` reais — então mesmo com o cache `op.cenarioId` sujo, o
+   * que aparece na tela é o que existe em disco.
+   */
+  async function abrirLista() {
     document.getElementById('op-lista-overlay')?.remove();
     const nome = new Map(nodes.map((n) => [n.id, n.name]));
-    const ondeFica = (id) => {
-      const c = connections.find((x) => x.id === id);
+    const ondeFica = (op) => {
+      if (op.desancorada || !op.arestaId) return 'perdeu a passagem de origem';
+      const c = connections.find((x) => x.id === op.arestaId);
       return c ? `${nome.get(c.from) ?? '?'} → ${nome.get(c.to) ?? '?'}` : 'passagem removida';
     };
 
     const ov = document.createElement('div');
     ov.id = 'op-lista-overlay';
     ov.className = 'esc-overlay';
+    ov.innerHTML = `<div class="qd-box"><div class="qd-vazia">Carregando cenários…</div></div>`;
+    document.body.appendChild(ov);
+
+    /**
+     * Se o daemon não responder, a lista ainda abre — sem a coluna de cenário.
+     * Perder o pareamento é aceitável; perder o acesso ao que já foi escrito na
+     * frente do cliente não é.
+     */
+    let pareamento = null;
+    try {
+      pareamento = await Audasys.api.listarCenarios(activeClientId, activeCanvasId);
+    } catch (err) {
+      console.warn('[oportunidades] pareamento indisponível:', err.message);
+    }
+
+    const linhas = pareamento
+      ? pareamento.oportunidades
+      : oportunidades.map((o) => ({ oportunidade: o, cenario: null }));
+
+    const selo = (cenario, op) => {
+      if (!pareamento) return '';
+      if (cenario) {
+        return `<button class="op-selo op-selo-tem" data-abrir-cenario="${cenario.id}"
+                  title="Abrir o cenário">cenário: ${escapeHtml(cenario.name)}
+                  <span class="op-postura">${escapeHtml(cenario.derivadoDe?.postura ?? '')}</span></button>`;
+      }
+      return `<button class="op-selo op-selo-falta" data-gerar-cenario="${op.id}"
+                title="Desenhar o cenário que testa esta oportunidade">gerar cenário</button>`;
+    };
+
+    const cabecalho = pareamento
+      ? `${pareamento.total} oportunidade(s) · ${pareamento.comCenario} com cenário`
+      : `${oportunidades.length} mapeada(s) neste canvas`;
+
+    const orfaos = pareamento?.orfaos?.length
+      ? `<div class="op-orfaos">⚠ ${pareamento.orfaos.length} cenário(s) sem oportunidade correspondente:
+           ${pareamento.orfaos.map((c) => escapeHtml(c.name)).join(', ')}. A oportunidade que os
+           originou foi apagada — o desenho continua no disco, mas ninguém sabe mais que pergunta
+           ele responde.</div>`
+      : '';
+
     ov.innerHTML = `
       <div class="qd-box">
         <div class="esc-head">
-          <div><b>Hub de Oportunidades & Hipóteses</b>
-            <div class="agd-sub">${oportunidades.length} oportunidade(s) mapeada(s)</div></div>
+          <div><b>Hub de Oportunidades de Receita</b>
+            <div class="agd-sub">${cabecalho}</div></div>
           <button class="agd-close" data-fechar-lista>✕</button>
         </div>
-        <div class="op-lista">${oportunidades.map((o) => {
+        ${orfaos}
+        <div class="op-lista">${linhas.map(({ oportunidade: o, cenario }) => {
           const postura = POSTURA_LABELS[o.posturaSugerida || 'realista'] || POSTURA_LABELS.realista;
           const status = STATUS_LABELS[o.status || 'ideia'] || STATUS_LABELS.ideia;
-          const cenarioBadge = o.cenarioId
-            ? `<span class="op-status-badge" style="background:rgba(59,130,246,0.15);color:#60a5fa;border:1px solid #2563eb;padding:2px 8px;border-radius:4px;"><i class="fa-solid fa-diagram-project"></i> Cenário Ativo</span>`
-            : '';
           return `
-          <div class="op-lista-item" data-abrir-op="${o.id}">
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+          <div class="op-lista-item${o.desancorada ? ' op-desancorada' : ''}">
+            <div class="op-lista-topo">
               <span class="op-postura-badge" style="color:${postura.cor};background:${postura.bg}"><i class="fa-solid ${postura.icon}"></i> ${postura.label}</span>
-              <div style="display:flex;gap:6px;align-items:center;">
-                <span class="op-status-badge" style="color:${status.cor}">${status.label}</span>
-                ${cenarioBadge}
-              </div>
+              <span class="op-status-badge" style="color:${status.cor}">${status.label}</span>
             </div>
-            <div class="op-card-titulo">${escapeHtml(o.titulo)}</div>
-            <div class="op-lista-onde">${escapeHtml(ondeFica(o.arestaId))}</div>
-            <div class="markdown-body op-lista-corpo">${AudasysMarkdown.render(o.markdown || '_sem anotação_')}</div>
+            <div class="op-lista-cabeca">
+              <div class="op-card-titulo" data-abrir-op="${o.id}">${escapeHtml(o.titulo)}</div>
+              ${selo(cenario, o)}
+            </div>
+            <div class="op-lista-onde" data-abrir-op="${o.id}">${escapeHtml(ondeFica(o))}</div>
+            <div class="markdown-body op-lista-corpo" data-abrir-op="${o.id}">${AudasysMarkdown.render(o.markdown || '_sem anotação_')}</div>
           </div>`;
         }).join('') || '<div class="qd-vazia">Nada mapeado ainda. Clique numa passagem do processo e use "Mapear oportunidade de receita".</div>'}
         </div>
       </div>`;
-    document.body.appendChild(ov);
 
-    ov.addEventListener('click', (e) => {
+    ov.addEventListener('click', async (e) => {
       if (e.target.closest('[data-fechar-lista]') || e.target === ov) return ov.remove();
+
+      const cenarioId = e.target.closest('[data-abrir-cenario]')?.dataset.abrirCenario;
+      if (cenarioId) { ov.remove(); return openCanvas(cenarioId); }
+
+      const gerar = e.target.closest('[data-gerar-cenario]')?.dataset.gerarCenario;
+      if (gerar) {
+        const op = oportunidades.find((o) => o.id === gerar);
+        if (op) { ov.remove(); abrirModalCriarCenario(op); }
+        return;
+      }
+
       const id = e.target.closest('[data-abrir-op]')?.dataset.abrirOp;
       if (!id) return;
       ov.remove();

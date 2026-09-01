@@ -328,10 +328,16 @@ viewport.addEventListener('wheel', (e) => {
 
 // 3. NODE CREATION & RENDERING
 function createNode(type, x, y, customData = {}) {
+  /**
+   * Cinco tipos, os mesmos da paleta e do `NODE_TYPES` do servidor.
+   *
+   * Havia um sexto, `integration`, em três mapas daqui e numa regra de CSS. Não
+   * estava na paleta nem no servidor — que o coagia para `action` na hidratação.
+   * Tipo que não pode ser criado e não sobrevive ao salvamento é resto.
+   */
   const defaultNames = {
     trigger: 'Novo Gatilho',
     action: 'Nova Ação',
-    integration: 'Nova Integração',
     condition: 'Nova Decisão',
     output: 'Novo Resultado',
     wait: 'Nova Espera'
@@ -509,7 +515,6 @@ function renderNodeDOM(node) {
   const icons = {
     trigger: 'fa-play',
     action: 'fa-gears',
-    integration: 'fa-circle-nodes',
     condition: 'fa-code-branch',
     output: node.outcomeType === 'failure' ? 'fa-triangle-exclamation' : 'fa-flag-checkered',
     wait: 'fa-hourglass-half'
@@ -518,7 +523,6 @@ function renderNodeDOM(node) {
   const badges = {
     trigger: 'Gatilho',
     action: 'Ação',
-    integration: 'Integração',
     condition: 'Decisão',
     output: node.outcomeType === 'failure' ? 'Falha' : 'Resultado',
     wait: 'Espera'
@@ -795,8 +799,8 @@ function updateNodePreviewDetails(node) {
       failurePreview.className = 'node-failure-preview';
       el.insertBefore(failurePreview, tagsContainer);
     }
-    const catColor = LEAN_CATEGORY_COLORS[node.bottleneckCategory] || '';
-    const catLabel = LEAN_CATEGORY_LABELS[node.bottleneckCategory] || '';
+    const catColor = corDaCategoria(node.bottleneckCategory);
+    const catLabel = rotuloDaCategoria(node.bottleneckCategory);
     const catTag = catLabel ? `<span class="lean-cat-tag" style="background:${catColor}22;color:${catColor};border-color:${catColor}44">${catLabel}</span>` : '';
     const bodyText = node.bottleneck || '';
     failurePreview.innerHTML = `<i class="fa-solid fa-triangle-exclamation"></i>${catTag}${bodyText ? ` <span class="failure-text">${bodyText}</span>` : ''}`;
@@ -1135,7 +1139,6 @@ function selectNode(nodeId) {
     const labels = {
       trigger: 'Gatilho',
       action: 'Ação',
-      integration: 'Integração',
       condition: 'Decisão',
       output: node.outcomeType === 'failure' ? 'Falha' : 'Resultado',
       wait: 'Espera'
@@ -1250,15 +1253,19 @@ function selectConnection(connId) {
   abrirMenuDaAresta(conn);
 }
 
-/** Mesma taxonomia Lean do nó — dois vocabulários paralelos confundiriam. */
-const LEAN_CATS = [
-  { id: 'handoff', label: 'Handoff' }, { id: 'espera', label: 'Espera' },
-  { id: 'retrabalho', label: 'Retrabalho' }, { id: 'defeito', label: 'Defeito' },
-  { id: 'politica', label: 'Política' }, { id: 'estoque', label: 'Acúmulo/Fila' },
-  { id: 'superprocessamento', label: 'Superprocessamento' }, { id: 'movimento', label: 'Movimento' },
-  { id: 'superprod', label: 'Superprodução' }, { id: 'talento', label: 'Talento' },
-  { id: 'outro', label: 'Outro' },
-];
+/**
+ * A taxonomia Lean da aresta vem do servidor, como a do nó.
+ *
+ * Era uma lista fixa aqui, com o comentário "dois vocabulários paralelos
+ * confundiriam" em cima — e ela ERA o segundo vocabulário. Divergia em quatro
+ * rótulos ("Defeito" contra "Defeito de processo", "Talento" contra "Talento
+ * subutilizado"): a mesma categoria lia diferente conforme o formulário aberto.
+ * E uma empresa que estendesse `vocabulary` no `client.json` via a categoria
+ * nova no nó e não na passagem.
+ */
+const leanCats = () => (vocabulary.wasteCategories?.length
+  ? vocabulary.wasteCategories
+  : [{ id: 'outro', label: 'Outro' }]);
 
 /** Menu de contexto da aresta. Reusa os estilos de `.card-context-menu`. */
 function abrirMenuDaAresta(conn) {
@@ -1325,7 +1332,7 @@ function editarGargaloDaAresta(conn) {
       <button class="bp-pop-fechar" data-fechar-garg>✕</button></div>
     <div class="agd-sub" style="margin:-6px 0 10px">${escapeHtml(de)} → ${escapeHtml(para)}</div>
     <textarea id="garg-texto" rows="2" placeholder="O que trava nesta passagem?">${escapeHtml(conn.gargalo?.texto || '')}</textarea>
-    <div class="garg-cats">${LEAN_CATS.map(c => `
+    <div class="garg-cats">${leanCats().map(c => `
       <label class="garg-cat"><input type="checkbox" value="${c.id}" ${atuais.has(c.id) ? 'checked' : ''}> ${c.label}</label>`).join('')}</div>
     <div class="garg-foot">
       <button class="arb-btn primary" data-salvar-garg>Salvar</button>
@@ -2372,15 +2379,17 @@ document.getElementById('btn-save').addEventListener('click', async () => {
 });
 
 document.getElementById('btn-export').addEventListener('click', () => {
-  const data = {
-    nodes,
-    connections,
-    notes,
-    zoom,
-    panOffset,
-    nextNodeId,
-    nextNoteId
-  };
+  /**
+   * `serializeCanvas()` e não uma lista montada à mão.
+   *
+   * A lista à mão nasceu antes da camada de medição e da oportunidade de
+   * receita, e nunca foi atualizada: o arquivo exportado saía sem `breakpoints`
+   * e sem `oportunidades`, silenciosamente. Quem exportava para fazer backup
+   * antes de uma reunião levava um canvas com duas camadas a menos e só
+   * descobria ao reimportar. Um único ponto de serialização é o que impede a
+   * próxima camada de repetir isso.
+   */
+  const data = serializeCanvas();
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -2407,8 +2416,15 @@ function clearAllBoard() {
   nodes = [];
   connections = [];
   notes = [];
+  // Zeradas junto com o resto: sobreviviam à limpeza e o autosave seguinte
+  // regravava medições e oportunidades de um canvas que não existe mais. O
+  // servidor as descartava por órfãs, então o efeito era perda silenciosa.
+  breakpoints = [];
+  oportunidades = [];
   nextNodeId = 1;
   nextNoteId = 1;
+  window.AudasysBreakpoints?.renderTodos?.();
+  window.AudasysOportunidades?.renderTodos?.();
   deselectAll();
 }
 
@@ -2546,16 +2562,41 @@ function navigateToParentCanvas() {
 // 11. CONNECTION COLOR SYSTEM
 
 const RULE_COLOR_PALETTE = ['#3b82f6','#f59e0b','#ef4444','#10b981','#c084fc','#06b6d4','#f97316','#84cc16'];
+/**
+ * Cor por categoria de desperdício.
+ *
+ * `defeito` e `politica` FALTAVAM aqui e no mapa de rótulos. O efeito não era
+ * uma cor feia: `catLabel` saía vazio e a etiqueta inteira deixava de ser
+ * desenhada. O consultor classificava o gargalo como "Defeito de processo" e o
+ * card não mostrava categoria nenhuma — sem erro, sem aviso.
+ *
+ * Cor é a única parte da taxonomia que não vem do servidor (ele não tem opinião
+ * sobre cor), então a tabela fica. O que não pode voltar a acontecer é ela ser a
+ * fonte da LISTA: id sem entrada aqui recebe cor derivada do próprio id, e uma
+ * categoria criada no `client.json` da empresa nasce colorida e estável.
+ */
 const LEAN_CATEGORY_COLORS = {
-  espera: '#f59e0b', retrabalho: '#ef4444', handoff: '#f97316',
-  superprocessamento: '#8b5cf6', estoque: '#06b6d4', movimento: '#3b82f6',
-  superprod: '#ec4899', talento: '#10b981', outro: '#94a3b8'
+  espera: '#f59e0b', retrabalho: '#ef4444', defeito: '#dc2626', politica: '#a855f7',
+  handoff: '#f97316', superprocessamento: '#8b5cf6', estoque: '#06b6d4',
+  movimento: '#3b82f6', superprod: '#ec4899', talento: '#10b981', outro: '#94a3b8'
 };
-const LEAN_CATEGORY_LABELS = {
-  espera: 'Espera', retrabalho: 'Retrabalho', handoff: 'Handoff',
-  superprocessamento: 'Superprocessamento', estoque: 'Acúmulo/Fila',
-  movimento: 'Movimento', superprod: 'Superprodução', talento: 'Talento', outro: 'Outro'
-};
+
+const PALETA_CAT_EXTRA = ['#0ea5e9', '#eab308', '#14b8a6', '#f43f5e', '#8b5cf6', '#22c55e'];
+
+/** Estável entre sessões: a mesma categoria recebe sempre a mesma cor. */
+function corDaCategoria(id) {
+  if (!id) return '';
+  if (LEAN_CATEGORY_COLORS[id]) return LEAN_CATEGORY_COLORS[id];
+  let h = 0;
+  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
+  return PALETA_CAT_EXTRA[h % PALETA_CAT_EXTRA.length];
+}
+
+/** O rótulo é do servidor — é ele que conhece o vocabulário desta empresa. */
+function rotuloDaCategoria(id) {
+  if (!id) return '';
+  return vocabulary.wasteCategories?.find(c => c.id === id)?.label || id;
+}
 
 function updateConnectionStyle(conn) {
   const path = document.getElementById(conn.id);
@@ -3260,7 +3301,15 @@ function renderFolderDOM(folder, canvases, home) {
 
 function renderProcessoCard(cv, cenariosFilhos, folder, home, POSTURA_LABELS) {
   const card = document.createElement('div');
-  card.className = 'canvas-home-card';
+  /**
+   * Cenário e processo real não podem parecer a mesma coisa na home.
+   *
+   * É o risco que o `derivadoDe` existe para conter: um cenário aceito por
+   * engano virar "o processo que a empresa tem". Na tela isso custa um selo —
+   * sem ele os dois cards são idênticos, e o erro é silencioso.
+   */
+  const cenario = cv.derivadoDe || null;
+  card.className = `canvas-home-card${cenario ? ' canvas-card-cenario' : ''}`;
   card.id = `canvas-card-${cv.id}`;
 
   const temMapa = !!(cv.mapaProcessoAtual || cv.versoesMapaCount > 0);
@@ -3302,13 +3351,14 @@ function renderProcessoCard(cv, cenariosFilhos, folder, home, POSTURA_LABELS) {
     </div>
     <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:8px;">
       <div class="canvas-card-name" style="cursor:pointer;">${escapeHtml(cv.name)}</div>
-      ${cv.derivadoDe ? `<span class="op-postura-badge" style="color:#60a5fa;background:rgba(96,165,250,0.15);font-size:10px;">CENÁRIO</span>` : (temMapa ? `<span class="badge-mapa-status versao"><i class="fa-solid fa-file-circle-check"></i> Mapa v${versaoNum}</span>` : `<span class="badge-mapa-status rascunho"><i class="fa-solid fa-pencil"></i> Rascunho</span>`)}
+      ${cenario ? `<span class="op-postura-badge" style="color:#60a5fa;background:rgba(96,165,250,0.15);font-size:10px;" title="${escapeHtml(cenario.premissa || '')}">CENÁRIO</span>` : (temMapa ? `<span class="badge-mapa-status versao"><i class="fa-solid fa-file-circle-check"></i> Mapa v${versaoNum}</span>` : `<span class="badge-mapa-status rascunho"><i class="fa-solid fa-pencil"></i> Rascunho</span>`)}
     </div>
+    ${cenario?.premissa ? `<div class="canvas-card-premissa">${escapeHtml(cenario.premissa)}</div>` : ''}
     <div class="canvas-card-meta">
       <i class="fa-regular fa-clock"></i> ${formatDate(cv.lastModified)} · 
       <span>${cv.nodeCount || 0} passos</span>
       ${cv.bottleneckCount ? `· <span style="color:#fbbf24; font-weight:600;"><i class="fa-solid fa-triangle-exclamation"></i> ${cv.bottleneckCount} gargalo(s)</span>` : ''}
-      ${cv.pendingChangesets ? `<span class="canvas-card-pending" title="Alterações pendentes do Copilot"><i class="fa-solid fa-wand-magic-sparkles"></i> ${cv.pendingChangesets}</span>` : ''}
+      ${cv.pendingChangesets ? `<span class="canvas-card-pending" title="O agente propôs alterações que ainda não foram revisadas"><i class="fa-solid fa-wand-magic-sparkles"></i> ${cv.pendingChangesets}</span>` : ''}
     </div>
     ${cenariosHtml}
   `;

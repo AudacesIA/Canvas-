@@ -72,6 +72,26 @@ export class Storage {
   // --- changesets ---
 
   /** @param {'pending'|'archive'} [scope] @returns {Promise<object[]>} */
+  // --- documentos (.md) -------------------------------------------------
+  /**
+   * Entregáveis de texto: o mapa de gargalos e as comparações real × cenário.
+   *
+   * Ficam FORA do JSON do canvas de propósito. O documento é para ser lido por
+   * quem não abre a ferramenta — o dono da operação, na reunião — e é grande:
+   * enfiá-lo no canvas engordaria todo autosave e todo patch SSE por um dado
+   * que a tela não desenha. Em arquivo, ele também é diffável entre semanas,
+   * que é como a consultoria mostra o próprio avanço.
+   *
+   * @param {string} nome  nome do arquivo, com extensão (ex.: `mapa.md`)
+   * @returns {Promise<string|null>} `null` quando não existe
+   */
+  async readDoc(clientId, canvasId, nome) { throw new Error('not implemented'); }
+
+  async writeDoc(clientId, canvasId, nome, texto) { throw new Error('not implemented'); }
+
+  /** @returns {Promise<Array<{nome, bytes, modificadoEm}>>} */
+  async listDocs(clientId, canvasId) { throw new Error('not implemented'); }
+
   async listChangesets(clientId, scope) { throw new Error('not implemented'); }
 
   /** @returns {Promise<object|null>} */
