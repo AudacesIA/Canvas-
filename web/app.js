@@ -3132,6 +3132,11 @@ function showHomeView() {
   const titleWrapper = document.getElementById('header-canvas-title-wrapper');
   if (titleWrapper) titleWrapper.style.display = 'none';
 
+  // O filtro de Área só faz sentido sobre um canvas aberto. Ele nasceu no branch
+  // que não tinha esta tela, e por isso não estava na lista de esconder.
+  const headerFilter = document.getElementById('header-filter');
+  if (headerFilter) headerFilter.style.display = 'none';
+
   const breadcrumb = document.getElementById('header-breadcrumb');
   if (breadcrumb) breadcrumb.style.display = 'none';
 
@@ -3159,6 +3164,9 @@ function showCanvasView(canvasId, canvasName) {
     const titleInput = document.getElementById('header-canvas-title-input');
     if (titleInput) titleInput.value = canvasName || 'Canvas sem título';
   }
+
+  const headerFilter = document.getElementById('header-filter');
+  if (headerFilter) headerFilter.style.display = 'flex';
 
   document.getElementById('header-actions').style.display = 'flex';
 

@@ -261,6 +261,14 @@
           <p class="modal-subtitle">Deriva uma simulação visual (To-Be) a partir do Mapa de Processos oficial.</p>
         </div>
         <div class="modal-body" style="padding: 16px 0;">
+          ${op ? '' : `
+          <div class="panel-section" style="margin-bottom:14px;">
+            <label for="sc-oportunidade">Oportunidade que este cenário pré-valida:</label>
+            <select id="sc-oportunidade" style="width:100%;margin-top:6px;padding:8px 12px;background:rgba(15,23,42,0.9);border:1px solid rgba(255,255,255,0.15);border-radius:6px;color:#fff;">
+              <option value="">Carregando oportunidades...</option>
+            </select>
+            <p class="modal-subtitle" style="margin-top:6px;font-size:11px;">Todo cenário testa uma oportunidade, e cada oportunidade tem no máximo um cenário.</p>
+          </div>`}
           <div class="panel-section">
             <label for="sc-premissa">Premissa do Cenário (A frase-guia):</label>
             <input type="text" id="sc-premissa" value="${escapeHtml(tituloOp)}" placeholder="Ex: Terceirizar logística Sul com operador parceiro" style="width:100%;margin-top:6px;padding:8px 12px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.15);border-radius:6px;color:#fff;">
@@ -287,6 +295,39 @@
 
     document.body.appendChild(modal);
 
+    /**
+     * Preenche o seletor quando o modal foi aberto SEM oportunidade — o caminho
+     * do card da Home e do comparador, que partem do Processo Real.
+     *
+     * O servidor exige `oportunidadeId` e recusa com 422 sem ele; até aqui esses
+     * dois botões mandavam `null` e quebravam. A lista vem do pareamento, não do
+     * canvas: é ela que diz quais oportunidades JÁ têm cenário, e a regra é 1:1 —
+     * oferecer uma já usada só produziria um 409 depois do clique.
+     */
+    if (!op) {
+      const seletor = modal.querySelector('#sc-oportunidade');
+      const btnCriar = modal.querySelector('#btn-executar-criacao-cenario');
+      Audasys.api.listarCenarios(effClientId, effCanvasId).then((pareamento) => {
+        const livres = pareamento.oportunidades.filter((l) => !l.cenario);
+        if (!livres.length) {
+          const nenhuma = pareamento.oportunidades.length
+            ? 'Todas as oportunidades já têm cenário'
+            : 'Nenhuma oportunidade mapeada neste processo';
+          seletor.innerHTML = `<option value="">${escapeHtml(nenhuma)}</option>`;
+          btnCriar.disabled = true;
+          btnCriar.title = `${nenhuma}. Mapeie uma oportunidade numa passagem de bastão para simular um cenário.`;
+          return;
+        }
+        seletor.innerHTML = livres
+          .map((l) => `<option value="${escapeHtml(l.oportunidade.id)}">${escapeHtml(l.oportunidade.titulo || l.oportunidade.id)}</option>`)
+          .join('');
+      }).catch((err) => {
+        console.warn('[oportunidades] pareamento indisponível:', err.message);
+        seletor.innerHTML = '<option value="">Não foi possível carregar</option>';
+        btnCriar.disabled = true;
+      });
+    }
+
     modal.addEventListener('click', async (e) => {
       if (e.target.closest('[data-fechar-modal]') || e.target === modal) {
         modal.remove();
@@ -299,6 +340,12 @@
 
         if (!premissa) {
           alert('Por favor, informe a premissa do cenário.');
+          return;
+        }
+
+        const oportunidadeId = op?.id || modal.querySelector('#sc-oportunidade')?.value || '';
+        if (!oportunidadeId) {
+          alert('Escolha a oportunidade de receita que este cenário pré-valida.');
           return;
         }
 
@@ -321,7 +368,7 @@
             nome,
             premissa,
             postura,
-            oportunidadeId: op?.id || null,
+            oportunidadeId,
           });
 
           if (op) {
