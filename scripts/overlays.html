@@ -1,0 +1,81 @@
+<!doctype html>
+<!--
+  Regressão dos overlays que usam `.modal-overlay`.
+
+  `.modal-overlay` nasce com `opacity:0; pointer-events:none` e `.modal-content`
+  com `transform: scale(0.96)`; só `.open` desfaz os três. Dois overlays eram
+  criados sem essa classe e ficavam no DOM, invisíveis e inclicáveis — o modal de
+  cenário e o comparador. O sintoma era "clico e não acontece nada", sem erro no
+  console e sem nada faltando no DOM, que é a razão de existir este arquivo:
+  nenhuma suíte que só procura elementos teria pegado.
+
+  Rodar:
+    AUDASYS_TEST=1 npm start
+    chrome --headless=new http://127.0.0.1:8787/scripts/overlays.html
+    # resultado em /tmp/audasys-e2e-report.json
+    # (sem --dump-dom nem --virtual-time-budget: o EventSource do app impede o
+    #  tempo virtual de assentar, e o dump nunca sai)
+-->
+<title>overlays</title><body><pre id="o">…</pre>
+<iframe id="f" src="/" style="position:fixed;left:-4000px;width:1500px;height:950px"></iframe>
+<script>
+const R=[],erros=[];
+const ck=(n,p,d)=>R.push((p?'OK   ':'FALHA')+' '+n+(d?'  ('+d+')':''));
+window.addEventListener('error',e=>erros.push(e.message));
+const until=async(f,ms=6000)=>{const t=Date.now();while(Date.now()-t<ms){try{if(await f())return true;}catch{}await new Promise(r=>setTimeout(r,110));}return false;};
+const api=async(m,p,b)=>{const r=await fetch(p,{method:m,headers:{'Content-Type':'application/json'},body:b?JSON.stringify(b):undefined});const j=await r.json().catch(()=>({}));if(!r.ok)throw new Error(j.error||r.status);return j;};
+
+/** Um overlay só conta como aberto se dá para VER e CLICAR. */
+async function conferirVisivel(W,D,id,rotulo){
+  const el=D().getElementById(id);
+  if(!el){ck(rotulo+': entra no DOM',false);return;}
+  ck(rotulo+': entra no DOM',true);
+  await until(()=>el.classList.contains('open'),2500);
+  const cs=W.getComputedStyle(el);
+  ck(rotulo+': visível',parseFloat(cs.opacity)>0.9,'opacity='+cs.opacity);
+  ck(rotulo+': clicável',cs.pointerEvents!=='none','pointer-events='+cs.pointerEvents);
+  const box=el.querySelector('.modal-content');
+  if(box){
+    const t=W.getComputedStyle(box).transform;
+    ck(rotulo+': conteúdo em escala 1',!/0\.9/.test(t),'transform='+t);
+  }
+}
+
+(async()=>{
+try{
+ const {client}=await api('POST','/api/clients',{name:'ZZ Overlays'});
+ const cid=client.id;
+ const {canvas}=await api('POST',`/api/clients/${cid}/canvases`,{name:'Processo'});
+ await api('PUT',`/api/clients/${cid}/canvases/${canvas.id}`,{nodes:[
+   {id:'n1',name:'Embalar',type:'action',x:80,y:200},{id:'n2',name:'Coletar',type:'action',x:420,y:200}],
+  connections:[{id:'e1',from:'n1',to:'n2'}],
+  oportunidades:[{id:'op1',arestaId:'e1',titulo:'Roteirizar frota'}],breakpoints:[],notes:[]});
+
+ const f=document.getElementById('f'), W=f.contentWindow, D=()=>f.contentDocument;
+ await until(()=>D().readyState==='complete'&&typeof W.openCanvas==='function');
+ W.activeClientId=cid;
+
+ ck('window.abrirOverlay existe',typeof W.abrirOverlay==='function');
+
+ // 1. modal de cenário, pelo mesmo caminho do card da Home (op = null)
+ W.AudasysOportunidades.abrirModalCriarCenario(null,canvas.id);
+ await until(()=>D().getElementById('simular-cenario-modal'));
+ await conferirVisivel(W,D,'simular-cenario-modal','modal de cenário');
+
+ // sem oportunidade escolhida o servidor recusaria: o seletor precisa vir cheio
+ const okSel=await until(()=>{const s=D().getElementById('sc-oportunidade');return s&&s.options.length&&s.options[0].value;},2500);
+ ck('seletor traz a oportunidade livre',okSel,D().getElementById('sc-oportunidade')?.options[0]?.textContent);
+ D().getElementById('simular-cenario-modal')?.remove();
+
+ // 2. comparador, sobre um cenário de verdade
+ const {canvas:cen}=await api('POST',`/api/clients/${cid}/canvases/${canvas.id}/cenarios`,
+   {premissa:'e se a coleta fosse na origem?',postura:'otimista',oportunidadeId:'op1'});
+ W.AudasysComparador.abrirModalComparador(cid,cen.id);
+ await until(()=>D().getElementById('comparador-modal'));
+ await conferirVisivel(W,D,'comparador-modal','comparador');
+}catch(e){ck('execução',false,e.message);}
+ const text=R.join('\n')+(erros.length?'\n\nERROS JS:\n'+erros.join('\n'):'');
+ document.getElementById('o').textContent=text;
+ await fetch('/api/_test-report',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text})});
+})();
+</script>

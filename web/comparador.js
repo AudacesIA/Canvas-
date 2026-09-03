@@ -74,6 +74,7 @@
       </div>`;
 
     document.body.appendChild(overlay);
+    window.abrirOverlay?.(overlay);
 
     overlay.addEventListener('click', (e) => {
       if (e.target.closest('[data-fechar-comp]') || e.target === overlay) {

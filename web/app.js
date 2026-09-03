@@ -20,6 +20,23 @@ window.OverlayManager = {
   }
 };
 
+/**
+ * Liga um overlay que usa `.modal-overlay`.
+ *
+ * `.modal-overlay` nasce com `opacity:0; pointer-events:none` e `.modal-content`
+ * com `transform: scale(0.96)` — os três só são desfeitos por `.open`. Sem esta
+ * chamada o modal é criado, entra no DOM e fica invisível e inclicável: foi o que
+ * fez "Criar Cenário E Se" e o comparador parecerem não responder ao clique.
+ *
+ * A classe entra no frame seguinte para a transição de fato acontecer; aplicada
+ * no mesmo frame do `appendChild`, o navegador colapsa os dois estados e o modal
+ * aparece seco, sem o fade.
+ */
+window.abrirOverlay = function abrirOverlay(el) {
+  if (!el) return;
+  requestAnimationFrame(() => el.classList.add('open'));
+};
+
 // 1. STATE INITIALIZATION
 let nodes = [];
 let connections = [];

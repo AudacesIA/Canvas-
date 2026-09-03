@@ -294,6 +294,7 @@
       </div>`;
 
     document.body.appendChild(modal);
+    window.abrirOverlay?.(modal);
 
     /**
      * Preenche o seletor quando o modal foi aberto SEM oportunidade — o caminho
