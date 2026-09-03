@@ -3453,8 +3453,6 @@ input.ev-meio, textarea.ev-meio, select.ev-meio { color: #c2c9d6; }
 
 @media (max-width: 1150px) {
   :root { --properties-width: 320px; --sidebar-width: 230px; }
-  .header-filter label { font-size: 0; }
-  .header-filter label i { font-size: 13px; }
   .app-header { padding: 0 14px; gap: 8px; }
   .header-actions { gap: 6px; }
   .header-actions .header-btn { padding: 7px 9px; }
@@ -3466,7 +3464,6 @@ input.ev-meio, textarea.ev-meio, select.ev-meio { color: #c2c9d6; }
   .header-actions { gap: 4px; }
   .header-actions .header-btn { padding: 6px 7px; }
   .logo-text { font-size: 0; }
-  .header-filter select { max-width: 110px; }
 }
 
 /* ── Progresso da criação de cenário ──────────────────────────────────────────

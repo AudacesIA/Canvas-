@@ -119,7 +119,6 @@ const btnDeleteNode = document.getElementById('btn-delete-node');
 const closePropertiesBtn = document.getElementById('close-properties-btn');
 
 // Top Filter DOM
-const filterAreaSelect = document.getElementById('filter-dept');
 
 // Subprocess DOM
 const subprocessInput = document.getElementById('subprocess-input');
@@ -1487,61 +1486,13 @@ function updateNodeDOMTitle(nodeId, newTitle) {
         node[propName] = field.value;
         touchField(node, propName);
         updateNodePreviewDetails(node);
-        
-        // Update department filtering
-        applyAreaFilter();
-        
+
         saveToLocalStorage();
       }
     }
   });
 });
 
-// Area / Department filtering logic
-function applyAreaFilter() {
-  const selectedArea = filterAreaSelect.value;
-  
-  if (selectedArea === 'all') {
-    nodes.forEach(n => {
-      const el = document.getElementById(n.id);
-      if (el) el.classList.remove('dimmed');
-    });
-    connections.forEach(c => {
-      const el = document.getElementById(c.id);
-      if (el) el.classList.remove('dimmed');
-    });
-  } else {
-    nodes.forEach(n => {
-      const el = document.getElementById(n.id);
-      if (el) {
-        if (n.area === selectedArea) {
-          el.classList.remove('dimmed');
-        } else {
-          el.classList.add('dimmed');
-        }
-      }
-    });
-    
-    connections.forEach(c => {
-      const el = document.getElementById(c.id);
-      if (el) {
-        const fromNode = nodes.find(n => n.id === c.from);
-        const toNode = nodes.find(n => n.id === c.to);
-        
-        const isFromMatch = fromNode && fromNode.area === selectedArea;
-        const isToMatch = toNode && toNode.area === selectedArea;
-        
-        if (isFromMatch && isToMatch) {
-          el.classList.remove('dimmed');
-        } else {
-          el.classList.add('dimmed');
-        }
-      }
-    });
-  }
-}
-
-filterAreaSelect?.addEventListener('change', applyAreaFilter);
 
 // Tools tag management
 propTools?.addEventListener('input', () => {
@@ -2322,7 +2273,6 @@ function applyCanvasState(data, opts = {}) {
 
   updateViewport();
   updateConnections();
-  applyAreaFilter();
 
   if (opts.reselect && nodes.some(n => n.id === opts.reselect)) selectNode(opts.reselect);
   if (opts.persist) saveToLocalStorage();
@@ -2534,10 +2484,8 @@ function navigateToChildCanvas(node) {
   updateConnections();
   deselectAll();
 
-  // Show breadcrumb, hide filter
   document.getElementById('header-breadcrumb').style.display = 'flex';
   document.getElementById('breadcrumb-node-name').textContent = node.name;
-  document.getElementById('header-filter').style.display = 'none';
 }
 
 document.getElementById('btn-back-to-parent').addEventListener('click', navigateToParentCanvas);
@@ -2572,7 +2520,6 @@ function navigateToParentCanvas() {
   childContext = null;
 
   document.getElementById('header-breadcrumb').style.display = 'none';
-  document.getElementById('header-filter').style.display = 'flex';
   saveToLocalStorage();
 }
 
@@ -3116,7 +3063,6 @@ async function loadVocabulary(clientId) {
     if ([...select.options].some(o => o.value === current)) select.value = current;
   };
 
-  fill(document.getElementById('filter-dept'), vocabulary.areas, { allOption: { value: 'all', label: 'Todas as Áreas' } });
   fill(document.getElementById('prop-dept'), vocabulary.areas);
   fill(document.getElementById('prop-bottleneck-category'), vocabulary.wasteCategories,
        { allOption: { value: '', label: 'Sem categoria' } });
@@ -3149,11 +3095,6 @@ function showHomeView() {
   const titleWrapper = document.getElementById('header-canvas-title-wrapper');
   if (titleWrapper) titleWrapper.style.display = 'none';
 
-  // O filtro de Área só faz sentido sobre um canvas aberto. Ele nasceu no branch
-  // que não tinha esta tela, e por isso não estava na lista de esconder.
-  const headerFilter = document.getElementById('header-filter');
-  if (headerFilter) headerFilter.style.display = 'none';
-
   const breadcrumb = document.getElementById('header-breadcrumb');
   if (breadcrumb) breadcrumb.style.display = 'none';
 
@@ -3181,9 +3122,6 @@ function showCanvasView(canvasId, canvasName) {
     const titleInput = document.getElementById('header-canvas-title-input');
     if (titleInput) titleInput.value = canvasName || 'Canvas sem título';
   }
-
-  const headerFilter = document.getElementById('header-filter');
-  if (headerFilter) headerFilter.style.display = 'flex';
 
   document.getElementById('header-actions').style.display = 'flex';
 

@@ -187,7 +187,6 @@
     }
 
     if (touchedLayout) updateConnections();
-    applyAreaFilter();
   }
 
   /** Remove nó sem confirmação e sem salvar — o save vem uma vez no fim do lote. */
