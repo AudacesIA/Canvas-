@@ -107,11 +107,10 @@ export function registerCanvasRoutes(router, { canvasService }) {
   });
 
   /**
-   * O mostrador: uma linha por oportunidade, com o cenário dela ou `null`.
+   * Cenários derivados deste processo, mais as oportunidades do canvas.
    *
-   * Devolve o pareamento em vez da lista solta de cenários porque é a resposta
-   * a "quantas das nossas ideias já foram desenhadas?" — e porque uma tela que
-   * itera esta estrutura não consegue exibir contagens divergentes.
+   * As duas listas vêm juntas por conveniência de tela, não por vínculo: desde
+   * que cenário e oportunidade se separaram, uma não diz nada sobre a outra.
    */
   router.get('/api/clients/:clientId/canvases/:canvasId/cenarios', async (req, res, { clientId, canvasId }) => {
     sendJson(res, 200, await canvasService.pareamentoDeCenarios(clientId, canvasId));

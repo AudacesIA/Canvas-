@@ -88,7 +88,7 @@
       request('POST', `/api/clients/${clientId}/canvases/${canvasId}/merlin/simular`, {
         body: { premissa, postura, oportunidadeId },
       }),
-    /** Devolve `{ cenarios, oportunidades, total, comCenario, semCenario, orfaos }`. */
+    /** Devolve `{ canvasNome, cenarios, oportunidades, totalCenarios, totalOportunidades }`. */
     listarCenarios: (clientId, canvasId) =>
       request('GET', `/api/clients/${clientId}/canvases/${canvasId}/cenarios`),
     compararCenario: (clientId, canvasId) =>

@@ -451,23 +451,25 @@ server.registerTool(
       + '(remover o passo que some, ligar a passagem nova).\n'
       + 'A postura NÃO é um multiplicador: "pessimista" não significa reduzir 8%, significa uma '
       + 'premissa mais dura escrita por extenso — algo que o dono possa contestar na reunião.\n\n'
-      + '⚠️ TODO cenário testa UMA oportunidade de receita, e cada oportunidade tem no máximo UM '
-      + 'cenário. Chame get_cenarios primeiro para ver quais ainda não foram desenhadas. A '
-      + 'sequência da consultoria é: gargalo → oportunidade de receita → cenário que a '
-      + 'pré-valida → comparação. Um cenário sem oportunidade é um desenho sem pergunta.',
+      + 'A premissa é a única coisa obrigatória. Cenário e oportunidade de receita são coisas '
+      + 'SEPARADAS: "e se usássemos um aplicativo para fazer a venda" questiona o processo '
+      + 'inteiro e não pende de nenhuma passagem de bastão. Se este cenário nasceu de uma '
+      + 'oportunidade mapeada, passe o `oportunidadeId` para deixar registrado de onde a ideia '
+      + 'saiu — é anotação de procedência, não requisito, e não há limite de cenários por '
+      + 'oportunidade.',
     inputSchema: {
       clientId: z.string(),
       canvasId: z.string().describe('O canvas do processo REAL. Cenário de cenário é recusado.'),
-      oportunidadeId: z.string().describe(
-        'Qual oportunidade de receita este cenário pré-valida (id vindo de get_oportunidades ou '
-        + 'get_cenarios). Recusado se ela já tiver cenário — a regra é 1:1.'),
+      oportunidadeId: z.string().optional().describe(
+        'OPCIONAL. Se a ideia veio de uma oportunidade mapeada, o id dela (de get_oportunidades), '
+        + 'só para registrar a procedência. A maioria dos cenários não tem uma.'),
       premissa: z.string().describe(
         'A frase que origina o cenário: "frota própria MG→BA e Sul terceirizado". '
         + 'Obrigatória — sem ela ninguém contesta o desenho seis semanas depois.'),
       postura: z.enum(['realista', 'otimista', 'pessimista', 'exploratorio']).optional()
         .describe('exploratorio = o cenário distante que serve para dar tangibilidade '
           + '(o braço robótico), mesmo sabendo que não é para agora'),
-      nome: z.string().optional().describe('Padrão: o título da oportunidade.'),
+      nome: z.string().optional().describe('Padrão: nome do processo + a premissa.'),
     },
   },
   guard(async ({ clientId, canvasId, oportunidadeId, premissa, postura, nome }) => {
@@ -475,7 +477,8 @@ server.registerTool(
       premissa, postura, nome, oportunidadeId,
     });
     return text(`Cenário criado: ${canvas.id}  "${canvas.name}"\n`
-      + `Testa a oportunidade: ${canvas.derivadoDe.oportunidadeId}\n`
+      + (canvas.derivadoDe.oportunidadeId
+        ? `Veio da oportunidade: ${canvas.derivadoDe.oportunidadeId}\n` : '')
       + `Premissa: ${canvas.derivadoDe.premissa}  [${canvas.derivadoDe.postura}]\n`
       + `Copiou ${canvas.nodes.length} passos e ${canvas.connections.length} passagens do processo real.\n\n`
       + 'O cenário JÁ É uma cópia idêntica do processo real — não o redesenhe do zero. Proponha '
@@ -534,32 +537,30 @@ server.registerTool(
   {
     title: 'Cenários de um processo',
     description:
-      'O pareamento entre oportunidades de receita e cenários: uma linha por OPORTUNIDADE, com o '
-      + 'cenário que a testa ou o aviso de que ela ainda não foi desenhada.\n'
-      + 'É a lista de trabalho: as oportunidades SEM cenário são o que falta pré-validar. Chame '
-      + 'antes de criar_cenario — a regra é um cenário por oportunidade, e repropor o que já foi '
-      + 'desenhado queima tempo de reunião.',
+      'Os cenários "e se" já desenhados a partir deste processo real, com a premissa de cada um.\n'
+      + 'Lista também as oportunidades de receita mapeadas no canvas — as duas coisas convivem no '
+      + 'mesmo processo, mas são independentes: um cenário não precisa de oportunidade para '
+      + 'existir, e uma oportunidade pode ter zero, um ou vários cenários.\n'
+      + 'Chame antes de criar_cenario para não redesenhar uma premissa que já está no ar.',
     inputSchema: { clientId: z.string(), canvasId: z.string().describe('O canvas do processo REAL') },
   },
   guard(async ({ clientId, canvasId }) => {
     const p = await client.cenarios(clientId, canvasId);
-    if (!p.total) {
-      return text('Nenhuma oportunidade de receita mapeada neste canvas ainda — e sem '
-        + 'oportunidade não há cenário a desenhar. Mapeie os gargalos primeiro.');
-    }
-    const linhas = p.oportunidades.map(({ oportunidade: o, cenario }) => (cenario
-      ? `✓ ${o.titulo}\n     cenário: ${cenario.id}  "${cenario.name}"  [${cenario.derivadoDe.postura}]`
-        + `  ${cenario.nodeCount} passos\n     premissa: ${cenario.derivadoDe.premissa}`
-      : `○ ${o.titulo}\n     SEM CENÁRIO — oportunidadeId: ${o.id}`));
 
-    const orfaos = p.orfaos.length
-      ? `\n\n⚠ ${p.orfaos.length} cenário(s) sem oportunidade correspondente: `
-        + `${p.orfaos.map((c) => `${c.id} "${c.name}"`).join(', ')}. A oportunidade que os originou `
-        + 'foi apagada do canvas real.'
-      : '';
+    const cenarios = p.cenarios.length
+      ? p.cenarios.map((c) => `• ${c.id}  "${c.name}"  [${c.derivadoDe.postura}]  ${c.nodeCount} passos\n`
+          + `     premissa: ${c.derivadoDe.premissa}`
+          + (c.derivadoDe.oportunidadeId ? `\n     veio da oportunidade: ${c.derivadoDe.oportunidadeId}` : '')).join('\n\n')
+      : 'Nenhum cenário desenhado ainda.';
 
-    return text(`${p.total} oportunidade(s) · ${p.comCenario} com cenário · ${p.semCenario} sem\n\n`
-      + `${linhas.join('\n\n')}${orfaos}`);
+    const oportunidades = p.oportunidades.length
+      ? p.oportunidades.map((o) => `• ${o.titulo}  [${o.status}]  id: ${o.id}`
+          + (o.desancorada ? '  ⚠ perdeu a passagem de origem' : '')).join('\n')
+      : 'Nenhuma oportunidade de receita mapeada.';
+
+    return text(`"${p.canvasNome}" — ${p.totalCenarios} cenário(s), `
+      + `${p.totalOportunidades} oportunidade(s) de receita\n\n`
+      + `CENÁRIOS\n${cenarios}\n\nOPORTUNIDADES DE RECEITA\n${oportunidades}`);
   }),
 );
 

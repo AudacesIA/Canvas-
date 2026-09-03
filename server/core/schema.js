@@ -452,7 +452,6 @@ export function hydrateDerivadoDe(raw) {
     oportunidadeId: raw.oportunidadeId ? String(raw.oportunidadeId) : null,
     premissa: String(raw.premissa ?? ''),
     postura: oneOf(raw.postura, POSTURAS, 'realista'),
-    oportunidadeId: raw.oportunidadeId ? String(raw.oportunidadeId) : null,
     comparativoTexto: String(raw.comparativoTexto ?? ''),
     nosRemovidos: Array.isArray(raw.nosRemovidos) ? raw.nosRemovidos : [],
     nosSubstituidos: Array.isArray(raw.nosSubstituidos) ? raw.nosSubstituidos : [],
@@ -522,25 +521,32 @@ export function hydrateOportunidade(raw, index = 0) {
     posturaSugerida: oneOf(raw?.posturaSugerida, POSTURAS, 'realista'),
     status: oneOf(raw?.status, OPORTUNIDADE_STATUS, 'ideia'),
     /**
-     * O cenário que pré-valida esta oportunidade. Um só — a regra é 1:1.
+     * FÓSSIL: lido, nunca mais escrito.
      *
-     * É a ponta de VOLTA de `derivadoDe.oportunidadeId`, e existe por um motivo
-     * mecânico: a hidratação enxerga um canvas de cada vez e não tem como saber
-     * que outro arquivo aponta para esta oportunidade. Sem este campo, a regra
-     * de descarte da órfã (abaixo) apagaria a única ponta do vínculo.
+     * Era a ponta de volta de `derivadoDe.oportunidadeId` enquanto valia a regra
+     * "1 cenário : 1 oportunidade". A regra caiu — cenário e oportunidade são
+     * coisas independentes — e `criarCenario` parou de gravar este campo.
      *
-     * A fonte da verdade continua sendo o `derivadoDe` do cenário, que é quem
-     * carrega a própria procedência. Este campo é cache: se o cenário for
-     * apagado, ele fica pendurado — e o pior efeito possível é a oportunidade
-     * sobreviver desancorada, que é o lado seguro do erro. O mostrador resolve
-     * contra a lista real de cenários, então a tela nunca mente.
+     * Continua sendo lido porque há canvases em disco com ele preenchido, e
+     * apagar o vínculo que o consultor viu na tela seria perda silenciosa. A
+     * fonte da verdade sempre foi o `derivadoDe` do cenário, então o mostrador
+     * resolve contra a lista real e não depende deste cache.
      */
     cenarioId: raw?.cenarioId ? String(raw.cenarioId) : null,
     /**
-     * Perdeu a passagem que a originou, mas tem cenário e por isso sobreviveu.
-     * DERIVADA na hidratação — nunca escrita à mão.
+     * Perdeu a aresta que a originou e sobreviveu assim mesmo.
+     *
+     * PERSISTE, ao contrário de antes. Enquanto valia a regra "1 cenário : 1
+     * oportunidade", a órfã só escapava do descarte se tivesse `cenarioId`, e o
+     * campo podia ser rederivado a cada leitura. Sem a regra, o `cenarioId`
+     * deixou de ser escrito — e um valor rederivado como `false` mandaria a
+     * oportunidade para o filtro de descarte na leitura SEGUINTE, apagando em
+     * silêncio o que o consultor escreveu.
+     *
+     * É a mesma armadilha de segunda-hidratação que `numeroOuNulo` documenta
+     * mais acima: o dano não aparece no primeiro save, aparece no segundo.
      */
-    desancorada: false,
+    desancorada: !!raw?.desancorada,
     // Posição própria, arrastável como um nó. `null` = ainda não foi movida, e
     // aí o cliente empilha a partir do asterisco. Sem isto os cards ficavam
     // presos numa fila vertical que se sobrepunha ao resto do mapa.
@@ -587,24 +593,23 @@ export function hydrateCanvas(raw, { id, clientId } = {}) {
     /**
      * Oportunidades de receita, ancoradas em arestas.
      *
-     * Órfã é DESCARTADA, ao contrário do que a hipótese fazia. A hipótese
-     * sobrevivia ao breakpoint apagado no servidor, mas na tela o card sumia em
-     * silêncio, porque a posição dependia da âncora existir. Dado invisível é
-     * pior que dado ausente: ninguém conserta o que não vê.
+     * Perder a aresta NÃO apaga a oportunidade: ela vira `desancorada` e fica.
+     * Apagar uma aresta é um gesto de meio segundo, e o texto de uma
+     * oportunidade é o que o consultor escreveu na frente do cliente — os dois
+     * não podem ter o mesmo peso.
      *
-     * ── A exceção, e por que ela existe ──────────────────────────────────────
-     * Órfã COM CENÁRIO sobrevive, desancorada. Descartá-la apagaria de um canvas
-     * inteiro a única razão de ele existir: o cenário continuaria em disco
-     * apontando para uma oportunidade que sumiu, e a comparação viraria um mapa
-     * sem pergunta. Apagar uma aresta é um gesto de meio segundo; destruir a
-     * ligação de um cenário não pode ser efeito colateral silencioso dele.
+     * O que ela não pode é sumir de vista: dado invisível é pior que dado
+     * ausente, porque ninguém conserta o que não vê. Foi o defeito da hipótese
+     * antiga, que sobrevivia no servidor e desaparecia da tela porque a posição
+     * dependia da âncora. A desancorada aparece no mostrador marcada como
+     * "perdeu a passagem de origem", que é o convite a reancorar.
      *
-     * Ela não fica invisível — que é o que a regra acima combate. Aparece no
-     * mostrador marcada como "perdeu a passagem de origem", que é justamente o
-     * convite a reancorar.
+     * A marca precisa PERSISTIR (ver `hydrateOportunidade`): rederivá-la a cada
+     * leitura devolveria `false` no segundo save e mandaria a oportunidade para
+     * o descarte — perda silenciosa, com um ciclo de atraso.
      */
     oportunidades: (Array.isArray(doc.oportunidades) ? doc.oportunidades.map(hydrateOportunidade) : [])
-      .filter((op) => op.cenarioId || edges.some((e) => e.id === op.arestaId))
+      .filter((op) => op.desancorada || edges.some((e) => e.id === op.arestaId))
       .map((op) => (edges.some((e) => e.id === op.arestaId)
         ? op
         : { ...op, arestaId: null, desancorada: true })),
