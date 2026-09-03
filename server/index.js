@@ -48,7 +48,7 @@ if (process.env.AUDASYS_TEST === '1') {
   });
 }
 
-registerCanvasRoutes(router, { canvasService });
+registerCanvasRoutes(router, { canvasService, changesetService });
 registerChangesetRoutes(router, { canvasService, changesetService });
 registerImportRoutes(router, { canvasService });
 

@@ -311,7 +311,8 @@
      */
     const ETAPAS = [
       ['flush', 'salvando alterações pendentes'],
-      ['fork', 'clonando o processo'],
+      ['fork', 'clonando o processo, passo a passo'],
+      ['remontar', 'a IA está lendo o mapa e propondo as mudanças'],
       ['abrir', 'abrindo o cenário'],
     ];
     function progresso(modal) {
@@ -332,6 +333,11 @@
         feita(id) {
           const el = corpo.querySelector(`[data-etapa="${id}"]`);
           if (el) { el.classList.remove('ativa'); el.classList.add('pronta'); el.querySelector('.sc-marca').className = 'sc-marca fa-solid fa-circle-check'; }
+        },
+        /** Marca a etapa como falha mas segue: o cenário sobreviveu. */
+        falhouEtapa(id) {
+          const el = corpo.querySelector(`[data-etapa="${id}"]`);
+          if (el) { el.classList.remove('ativa'); el.classList.add('falhou'); el.querySelector('.sc-marca').className = 'sc-marca fa-solid fa-triangle-exclamation'; }
         },
         /** Devolve a etapa em curso — é ela que diz onde quebrou. */
         emQual() {
@@ -392,9 +398,37 @@
           });
           passo.feita('fork');
 
+          /**
+           * A remontagem pode falhar sem que o cenário se perca.
+           *
+           * O clone fiel já está em disco e é uma resposta honesta por si só —
+           * "aqui está o processo real, a remontagem não saiu". Abortar tudo
+           * trocaria uma falha explicada por trabalho jogado fora, e mandaria o
+           * consultor recomeçar do zero na frente do cliente.
+           *
+           * É a etapa demorada: ~9 a 15s num mapa de 18 nós, contra 30ms do
+           * clone. É por ela que este progresso existe.
+           */
+          passo.emCurso('remontar');
+          let aviso = null;
+          try {
+            const r = await Audasys.api.remontarCenario(effClientId, cenario.id);
+            passo.feita('remontar');
+            if (!r.ops) aviso = `A IA não propôs mudanças: ${r.raciocinio}`;
+          } catch (err) {
+            passo.falhouEtapa('remontar');
+            aviso = err.causa === 'credencial'
+              ? `Cenário criado como cópia fiel, mas sem remontagem: ${err.message}`
+              : `Cenário criado como cópia fiel. A remontagem falhou (${err.causa ?? 'erro'}): ${err.message}`;
+          }
+
           passo.emCurso('abrir');
           modal.remove();
           if (window.openCanvas) window.openCanvas(cenario.id);
+          // Toast, não `alert`: o cenário existe e já está aberto na tela, e um
+          // diálogo modal obrigaria a fechar um aviso antes de olhar o mapa que
+          // acabou de ser criado.
+          if (aviso) window.AudasysAgent?.toast?.(aviso);
         } catch (err) {
           passo.falhou(passo.emQual() ?? 'fork', err.message);
           btn.disabled = false;

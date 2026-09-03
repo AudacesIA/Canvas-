@@ -46,6 +46,10 @@
       const err = new Error(payload?.error || `${method} ${path} falhou (${res.status})`);
       err.status = res.status;
       err.currentRev = payload?.currentRev;
+      // Classificação da falha, quando o servidor a informa: 'credencial' | 'api'
+      // | 'resposta'. É o que permite à tela dizer se falta configurar algo ou se
+      // o sistema quebrou, em vez de um "erro" genérico.
+      err.causa = payload?.causa;
       throw err;
     }
     return payload;
@@ -88,6 +92,13 @@
       request('POST', `/api/clients/${clientId}/canvases/${canvasId}/merlin/simular`, {
         body: { premissa, postura, oportunidadeId },
       }),
+    /**
+     * Pede à IA as mudanças que a premissa implica. Devolve um changeset pendente
+     * — nada é aplicado ao cenário sem aceite. Erros trazem `causa`:
+     * 'credencial' (falta chave), 'api' (rede/recusa) ou 'resposta' (ilegível).
+     */
+    remontarCenario: (clientId, canvasId) =>
+      request('POST', `/api/clients/${clientId}/canvases/${canvasId}/remontar`),
     /** Devolve `{ canvasNome, cenarios, oportunidades, totalCenarios, totalOportunidades }`. */
     listarCenarios: (clientId, canvasId) =>
       request('GET', `/api/clients/${clientId}/canvases/${canvasId}/cenarios`),

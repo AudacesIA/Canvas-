@@ -3,7 +3,6 @@ import { compararEmTexto } from './comparador.js';
 import { mapaMarkdown, comparacaoMarkdown, nomeDaComparacao, NOME_DO_MAPA } from './docService.js';
 import { newCanvasId, slugify } from './ids.js';
 import { withLock } from './locks.js';
-import { gerarFluxoCenario } from './scenarioEngine.js';
 import { canvasParaMarkdown } from './processoMarkdown.js';
 
 /** Erro com status HTTP, para as rotas traduzirem sem inventar mapeamento. */
@@ -179,40 +178,85 @@ export class CanvasService {
       }
     }
 
-    // Gera o fluxo transformado com base no mapa de processos original e na premissa
-    const transformado = gerarFluxoCenario(base, { premissa, postura, oportunidadeId });
-
     const cenario = await this.createCanvas(clientId, {
       name: nome || `${base.name} — ${premissa}`.slice(0, 80),
       folderId: base.folderId,
       /**
-       * O fork nasce com o fluxo TRANSFORMADO pela premissa, não com uma cópia
-       * crua do processo real — é isso que faz o cenário responder à pergunta
-       * que o originou em vez de ser um clone.
+       * O fork nasce como CÓPIA FIEL do processo real.
        *
-       * E leva as oportunidades, mas não os ponteiros de cenário delas: um
-       * `cenarioId` copiado apontaria, de dentro do cenário, para um irmão — e o
-       * vínculo que importa aqui é o `derivadoDe`, não a herança de outro fork.
+       * Antes ele passava por `gerarFluxoCenario`, que decidia as mudanças por
+       * match de palavra-chave na premissa e devolvia um roteiro de logística
+       * cravado no código. O clone chegava adulterado por um gerador que não
+       * tinha lido a premissa — e contradizia a instrução que o próprio MCP dá
+       * ao agente: "o cenário JÁ É uma cópia idêntica do processo real".
+       *
+       * Agora é idêntico mesmo. Toda diferença entra depois, por `remontar`, como
+       * proposta revisável — nunca como efeito colateral da criação.
+       *
+       * Leva as oportunidades, mas não os ponteiros de cenário delas: um
+       * `cenarioId` copiado apontaria, de dentro do cenário, para um irmão.
        */
       seed: strip({
         ...base,
-        oportunidades: base.oportunidades.map((o) => ({ ...o, cenarioId: null, status: o.status })),
-        nodes: transformado.nodes,
-        connections: transformado.connections,
+        oportunidades: base.oportunidades.map((o) => ({ ...o, cenarioId: null })),
       }),
       derivadoDe: {
         canvasId: base.id,
         oportunidadeId,
         premissa: String(premissa).trim(),
         postura,
-        comparativoTexto: transformado.comparativoTexto,
-        nosRemovidos: transformado.nosRemovidos,
-        nosSubstituidos: transformado.nosSubstituidos,
-        nosAdicionados: transformado.nosAdicionados,
       },
     });
 
     return cenario;
+  }
+
+  /**
+   * Pede à IA as mudanças que a premissa implica, e as devolve como CHANGESET.
+   *
+   * Changeset e não escrita direta: a proposta passa pela mesma validação de
+   * qualquer coisa que o agente escreve (`validateOps`), é desenhada como
+   * fantasma sobre o mapa e é aceita item a item. A IA propõe; quem decide é
+   * quem vai sentar na frente do cliente.
+   *
+   * Falha aqui NÃO desfaz o cenário. O clone fiel é uma resposta honesta por si
+   * só — "aqui está o processo, a remontagem não saiu" —, e apagá-lo trocaria uma
+   * falha visível por trabalho perdido.
+   */
+  async remontarCenario(clientId, canvasId, changesetService) {
+    const cenario = await this.getCanvas(clientId, canvasId);
+    if (!cenario.derivadoDe) {
+      throw httpError(422,
+        `"${cenario.name}" não é um cenário. A remontagem só faz sentido sobre um fork: `
+        + 'é o processo real que dá a referência do que está sendo mudado.');
+    }
+    const { proporRemontagem } = await import('./scenarioProposer.js');
+    const { ops, raciocinio, motivos, modelo } = await proporRemontagem(cenario, {
+      premissa: cenario.derivadoDe.premissa,
+      postura: cenario.derivadoDe.postura,
+    });
+
+    if (!ops.length) {
+      return { changeset: null, raciocinio, modelo, ops: 0 };
+    }
+
+    // `propose` devolve `{ changeset, warnings, conflicts, … }` — o changeset em
+    // si é uma chave de dentro, não o retorno inteiro.
+    const proposta = await changesetService.propose(clientId, canvasId, {
+      title: `Remontagem: ${cenario.derivadoDe.premissa}`.slice(0, 90),
+      // O `motivo` de cada op vira parte do racional — é o que o consultor lê
+      // para aceitar ou rejeitar uma mudança específica.
+      rationale: [raciocinio, ...motivos.map((m, i) => `${i + 1}. ${m}`)].join('\n'),
+      ops,
+      runId: `gemini_${Date.now()}`,
+    });
+    return {
+      changeset: proposta.changeset,
+      avisos: proposta.warnings ?? [],
+      raciocinio,
+      modelo,
+      ops: ops.length,
+    };
   }
 
   /** Salva e versiona o Canvas como um "Mapa de Processos" em Markdown. */

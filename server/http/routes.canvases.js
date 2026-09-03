@@ -9,7 +9,7 @@ import { httpError } from '../core/canvasService.js';
  * mesmo tempo e estado de sessão global seria exatamente o bug que a topologia
  * de dois processos existe para evitar.
  */
-export function registerCanvasRoutes(router, { canvasService }) {
+export function registerCanvasRoutes(router, { canvasService, changesetService }) {
   router.get('/api/clients', async (req, res) => {
     sendJson(res, 200, { clients: await canvasService.listClients() });
   });
@@ -187,6 +187,22 @@ export function registerCanvasRoutes(router, { canvasService }) {
     res.end(texto);
   });
 
+  /**
+   * Remontagem do cenário pela IA — devolve um changeset, não um canvas pronto.
+   *
+   * Erros carregam `causa` ('credencial' | 'api' | 'resposta') para a tela poder
+   * dizer se falta configurar algo ou se o sistema falhou. Era a distinção que o
+   * gerador anterior apagava: ele nunca falhava, inventava.
+   */
+  router.post('/api/clients/:clientId/canvases/:canvasId/remontar', async (req, res, { clientId, canvasId }) => {
+    try {
+      sendJson(res, 200, await canvasService.remontarCenario(clientId, canvasId, changesetService));
+    } catch (err) {
+      if (!err.causa) throw err;
+      sendJson(res, err.status ?? 502, { error: err.message, causa: err.causa });
+    }
+  });
+
   router.post('/api/clients/:clientId/canvases/:canvasId/duplicate', async (req, res, { clientId, canvasId }) => {
     sendJson(res, 201, { canvas: await canvasService.duplicateCanvas(clientId, canvasId) });
   });
@@ -202,6 +218,7 @@ export function registerCanvasRoutes(router, { canvasService }) {
       premissa: body.premissa || 'Otimização operacional e logística',
       postura: body.postura || 'realista',
       oportunidadeId: body.oportunidadeId || null,
+      changesetService,
     });
     sendJson(res, 201, resultado);
   });

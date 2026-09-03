@@ -572,7 +572,7 @@
   }
 
   window.AudasysAgent = {
-    attach, detach, focusNode, clearGhosts,
+    attach, detach, focusNode, clearGhosts, toast,
     get pending() { return pending; },
     // O SSE leva um round-trip para abrir. Uma proposta feita nesse intervalo
     // é gravada mas não chega à tela — e o agente recebe watching=0.
