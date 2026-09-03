@@ -58,6 +58,13 @@
   const api = {
     health: () => request('GET', '/health'),
     fullHome: () => request('GET', '/api/home'),
+    /** A home de um cliente só. É por onde o acesso de leitura entra: `/api/home` é de admin. */
+    homeDoCliente: (clientId) => request('GET', `/api/clients/${clientId}/home`),
+    sessao: () => request('GET', '/api/sessao'),
+    entrar: (chave) => request('POST', '/api/entrar', { body: { chave } }),
+    sair: () => request('POST', '/api/sair'),
+    gerarAcesso: (clientId) => request('POST', `/api/clients/${clientId}/acesso`),
+    revogarAcesso: (clientId) => request('DELETE', `/api/clients/${clientId}/acesso`),
     vocabulary: (clientId) => request('GET', `/api/clients/${clientId}/vocabulary`),
 
     createClient: (name) => request('POST', '/api/clients', { body: { name } }),

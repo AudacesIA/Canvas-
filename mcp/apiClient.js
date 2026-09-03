@@ -7,10 +7,22 @@ import { BASE_URL } from './ensureDaemon.js';
  * módulo não decide nada — é o que permite trocar o backend de arquivo por
  * Supabase sem abrir a pasta `mcp/`.
  */
+/**
+ * O daemon passou a exigir sessão, e este cliente não tem navegador nem cookie.
+ * `AUDASYS_SERVICE_TOKEN` é a credencial de serviço: o portão em `server/index.js`
+ * a trata como admin. Sem ela, as 19 ferramentas do Claude Desktop levam 401 na
+ * primeira chamada — e o erro que volta diz exatamente isso.
+ */
+const SERVICE_TOKEN = process.env.AUDASYS_SERVICE_TOKEN || '';
+
 async function request(method, path, body) {
+  const headers = {
+    ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
+    ...(SERVICE_TOKEN ? { 'X-Audasys-Token': SERVICE_TOKEN } : {}),
+  };
   const res = await fetch(BASE_URL + path, {
     method,
-    headers: body === undefined ? {} : { 'Content-Type': 'application/json' },
+    headers,
     body: body === undefined ? undefined : JSON.stringify(body),
   });
 
@@ -20,6 +32,11 @@ async function request(method, path, body) {
   if (!res.ok) {
     // A mensagem do servidor é escrita para o agente conseguir se corrigir
     // sozinho na volta; preservá-la inteira importa mais que padronizar.
+    if (res.status === 401 && !SERVICE_TOKEN) {
+      throw Object.assign(new Error(
+        'O daemon exige credencial e AUDASYS_SERVICE_TOKEN não está definida para o servidor MCP. '
+        + 'Acrescente-a ao ambiente do Claude Desktop (mesmo valor do .env do daemon).'), { status: 401 });
+    }
     const err = new Error(payload?.error || `${method} ${path} → ${res.status}`);
     err.status = res.status;
     err.payload = payload;

@@ -1,0 +1,65 @@
+<!doctype html>
+<!--
+  Papel × rota: o teste que só se descobre quebrado em produção.
+
+  Cobre o portão de server/index.js pelos dois lados — o que o admin pode e o
+  que o cliente NÃO pode. As negativas são as que importam: um 200 onde deveria
+  ser 403 é vazamento de dado de cliente, e nenhuma tela denuncia isso.
+
+  Rodar:
+    AUDASYS_TEST=1 AUDASYS_SECRET=... AUDASYS_ADMIN_KEY=... npm start
+    chrome --headless=new http://127.0.0.1:8787/scripts/acesso.html
+-->
+<title>acesso</title><body><pre id="o">…</pre>
+<script>
+window.CHAVE_ADMIN=new URLSearchParams(location.search).get('k')||'';
+const R=[],erros=[];
+const ck=(n,p,d)=>R.push((p?'OK   ':'FALHA')+' '+n+(d?'  ('+d+')':''));
+window.addEventListener('error',e=>erros.push(e.message));
+const cod=async(m,p,b)=>(await fetch(p,{method:m,headers:b?{'Content-Type':'application/json'}:{},body:b?JSON.stringify(b):undefined})).status;
+const j=async(p)=>(await fetch(p)).json();
+
+(async()=>{
+try{
+ // ── admin ────────────────────────────────────────────────────────────────
+ ck('entrar com chave errada é recusado', await cod('POST','/api/entrar',{chave:'nao-e-essa'})===401);
+ ck('entrar com a chave certa',           await cod('POST','/api/entrar',{chave:window.CHAVE_ADMIN})===200);
+ const s=await j('/api/sessao');
+ ck('sessão diz admin', s.autenticado && s.papel==='admin', s.papel);
+ ck('admin lê /api/home',                 await cod('GET','/api/home')===200);
+
+ // cria uma empresa de teste e gera o link dela
+ const {client}=await (await fetch('/api/clients',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:'ZZ Acesso'})})).json();
+ const {canvas}=await (await fetch(`/api/clients/${client.id}/canvases`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:'Mapa'})})).json();
+ const {client:outro}=await (await fetch('/api/clients',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:'ZZ Outro'})})).json();
+ const {caminho}=await (await fetch(`/api/clients/${client.id}/acesso`,{method:'POST'})).json();
+ ck('link gerado', /^\/e\/[A-Za-z0-9_-]{40,}$/.test(caminho), caminho.slice(0,14)+'…');
+
+ // ── vira cliente: abrir o link troca a sessão ────────────────────────────
+ await fetch(caminho, { redirect:'follow' });
+ const s2=await j('/api/sessao');
+ ck('sessão virou cliente', s2.papel==='cliente' && s2.clientId===client.id, s2.papel+':'+s2.clientId);
+
+ ck('cliente LÊ o canvas dele',           await cod('GET',`/api/clients/${client.id}/canvases`)===200);
+ ck('cliente NÃO lê outro cliente',       await cod('GET',`/api/clients/${outro.id}/canvases`)===403);
+ ck('cliente NÃO lê /api/home',           await cod('GET','/api/home')===403);
+ ck('cliente NÃO lista clientes',         await cod('GET','/api/clients')===403);
+ ck('cliente NÃO grava o próprio canvas', await cod('PUT',`/api/clients/${client.id}/canvases/${canvas.id}`,{nodes:[]})===403);
+ ck('cliente NÃO cria cenário (Gemini)',  await cod('POST',`/api/clients/${client.id}/canvases/${canvas.id}/cenarios`,{premissa:'x'})===403);
+ ck('cliente NÃO apaga canvas',           await cod('DELETE',`/api/clients/${client.id}/canvases/${canvas.id}`)===403);
+ ck('cliente NÃO gera link para si',      await cod('POST',`/api/clients/${client.id}/acesso`)===403);
+
+ // ── sair zera tudo ───────────────────────────────────────────────────────
+ await fetch('/api/sair',{method:'POST'});
+ ck('sem sessão não lê nada',             await cod('GET',`/api/clients/${client.id}/canvases`)===401);
+
+ // limpeza
+ await fetch('/api/entrar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({chave:window.CHAVE_ADMIN})});
+ await fetch(`/api/clients/${client.id}`,{method:'DELETE'});
+ await fetch(`/api/clients/${outro.id}`,{method:'DELETE'});
+}catch(e){ck('execução',false,e.message);}
+ const text=R.join('\n')+(erros.length?'\n\nERROS JS:\n'+erros.join('\n'):'');
+ document.getElementById('o').textContent=text;
+ await fetch('/api/_test-report',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text})});
+})();
+</script>

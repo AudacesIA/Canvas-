@@ -17,7 +17,7 @@
     #  tempo virtual de assentar, e o dump nunca sai)
 -->
 <title>overlays</title><body><pre id="o">…</pre>
-<iframe id="f" src="/" style="position:fixed;left:-4000px;width:1500px;height:950px"></iframe>
+<iframe id="f" style="position:fixed;left:-4000px;width:1500px;height:950px"></iframe>
 <script>
 const R=[],erros=[];
 const ck=(n,p,d)=>R.push((p?'OK   ':'FALHA')+' '+n+(d?'  ('+d+')':''));
@@ -43,6 +43,12 @@ async function conferirVisivel(W,D,id,rotulo){
 
 (async()=>{
 try{
+ // O daemon exige sessão desde o portão de acesso: sem entrar como admin, a
+ // primeira chamada de dado seria 401 e todo o resto falharia por tabela.
+ await api('POST','/api/entrar',{chave:new URLSearchParams(location.search).get('k')||''});
+ // Só agora o iframe pode carregar: o app checa a sessão no boot e, sem ela,
+ // redireciona para /entrar.html — o teste ficaria olhando a tela de login.
+ document.getElementById('f').src='/';
  const {client}=await api('POST','/api/clients',{name:'ZZ Overlays'});
  const cid=client.id;
  const {canvas}=await api('POST',`/api/clients/${cid}/canvases`,{name:'Processo'});

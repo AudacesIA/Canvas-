@@ -10,11 +10,36 @@ import { createStaticHandler } from './http/static.js';
 import { registerCanvasRoutes } from './http/routes.canvases.js';
 import { registerChangesetRoutes } from './http/routes.changesets.js';
 import { registerImportRoutes } from './http/routes.import.js';
+import { registerAcessoRoutes } from './http/routes.acesso.js';
+import { lerSessao, podeAcessar, exigirSegredo } from './http/sessao.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const PORT = Number(process.env.AUDASYS_PORT || 8787);
-const HOST = '127.0.0.1'; // nunca 0.0.0.0: sem auth, isto não sai da máquina
+/**
+ * O padrão continua sendo local. `0.0.0.0` só em produção, atrás de um proxy
+ * reverso que termina o HTTPS — este processo nunca fala TLS.
+ *
+ * Antes havia aqui um comentário dizendo "nunca 0.0.0.0: sem auth, isto não sai
+ * da máquina". A condição mudou: agora há sessão assinada e autorização por
+ * papel. Mas a trava velha era boa e vale manter uma equivalente — sair da
+ * interface local exige segredo configurado, e é isso que `exigirSegredo` faz
+ * logo abaixo.
+ */
+const HOST = process.env.AUDASYS_HOST || '127.0.0.1';
 const DATA_DIR = process.env.AUDASYS_DATA_DIR || path.join(ROOT, 'data');
+
+/**
+ * Falha no boot, não na primeira requisição.
+ *
+ * Um servidor que sobe sem segredo e só quebra quando alguém tenta entrar é um
+ * servidor que parece no ar. Melhor não subir.
+ */
+try {
+  exigirSegredo();
+} catch (err) {
+  console.error(`\n[audasys] ${err.message}\n`);
+  process.exit(1);
+}
 
 const storage = new FsStorage(DATA_DIR);
 const canvasService = new CanvasService(storage);
@@ -48,6 +73,7 @@ if (process.env.AUDASYS_TEST === '1') {
   });
 }
 
+registerAcessoRoutes(router, { canvasService });
 registerCanvasRoutes(router, { canvasService, changesetService });
 registerChangesetRoutes(router, { canvasService, changesetService });
 registerImportRoutes(router, { canvasService });
@@ -56,6 +82,17 @@ registerImportRoutes(router, { canvasService });
 // Não há exceção de CORS em nenhuma rota.
 
 const LOG_REQUESTS = process.env.AUDASYS_LOG !== '0';
+const SERVICE_TOKEN = process.env.AUDASYS_SERVICE_TOKEN || '';
+
+/**
+ * As únicas rotas de API que respondem sem sessão.
+ *
+ * Conjunto explícito e minúsculo: `/api/sessao` para a tela descobrir quem é
+ * (e responder "ninguém"), e `/api/entrar` para o consultor mandar a chave de
+ * admin. Tudo o mais nasce fechado.
+ */
+const ROTAS_ABERTAS = new Set(['/api/sessao', '/api/entrar', '/api/sair']);
+if (process.env.AUDASYS_TEST === '1') ROTAS_ABERTAS.add('/api/_test-report');
 
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, `http://${req.headers.host || HOST}`);
@@ -73,6 +110,27 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'OPTIONS') {
       res.writeHead(405).end();
       return;
+    }
+
+    /**
+     * O portão. Único ponto, antes de qualquer rota.
+     *
+     * Só `/api/` é guardado aqui. Os estáticos (o HTML, o JS, o CSS) ficam
+     * abertos de propósito: não há segredo neles, e a tela precisa carregar para
+     * conseguir dizer "seu link expirou". Quem guarda o dado é a API.
+     *
+     * O `X-Audasys-Token` é a porta do MCP: o servidor stdio do Claude Desktop
+     * fala com este daemon por HTTP e não tem navegador para carregar cookie.
+     */
+    if (url.pathname.startsWith('/api/') && !ROTAS_ABERTAS.has(url.pathname)) {
+      const servico = SERVICE_TOKEN && req.headers['x-audasys-token'] === SERVICE_TOKEN;
+      const sessao = servico ? { papel: 'admin', clientId: null } : lerSessao(req);
+      const veredito = podeAcessar(sessao, req.method, url.pathname);
+      if (!veredito.ok) {
+        sendJson(res, veredito.status, { error: veredito.motivo, semSessao: veredito.status === 401 });
+        return;
+      }
+      req.sessao = sessao;
     }
 
     const match = router.match(req.method, url.pathname);

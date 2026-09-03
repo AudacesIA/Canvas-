@@ -3004,9 +3004,19 @@ function loadHomeData() {
   return homeCache;
 }
 
-/** Busca a home no daemon e reconstrói o cache no formato que a UI espera. */
+/**
+ * Busca a home no daemon e reconstrói o cache no formato que a UI espera.
+ *
+ * O admin puxa `/api/home`, que lista todos os clientes. O cliente não pode
+ * chamá-la — leva 403 —, então puxa a própria e a embrulha no mesmo formato de
+ * "uma pasta por cliente". A tela abaixo daqui não sabe qual dos dois aconteceu,
+ * e é o que evita ter duas Home para manter.
+ */
 async function refreshHome() {
-  const { clients } = await Audasys.api.fullHome();
+  const { clients } = window.papelDaSessao === 'cliente'
+    ? await Audasys.api.homeDoCliente(window.clienteDaSessao)
+        .then(({ client, canvases }) => ({ clients: [{ ...client, canvases }] }))
+    : await Audasys.api.fullHome();
   homeCache = {
     folders: clients.map(c => ({
       id: c.id,
@@ -3177,6 +3187,90 @@ function loadHome() {
   countEl.textContent = `${totalCanvases} canvas${totalCanvases !== 1 ? 'es' : ''}`;
 }
 
+/**
+ * Link de acesso do cliente: gera, mostra UMA vez, revoga.
+ *
+ * O token aparece aqui e em nenhum outro lugar — em disco só fica o hash. Se o
+ * consultor fechar sem copiar, o caminho é gerar outro, e gerar outro invalida
+ * o anterior. É a mesma disciplina de chave de API, e vale explicar na tela em
+ * vez de deixar a pessoa descobrir depois que perdeu.
+ */
+async function abrirModalAcesso(folder) {
+  document.getElementById('modal-acesso')?.remove();
+  const ov = document.createElement('div');
+  ov.id = 'modal-acesso';
+  ov.className = 'esc-overlay';
+  ov.innerHTML = `
+    <div class="qd-box" style="max-width:520px;">
+      <div class="esc-head">
+        <div><b>Acesso de ${escapeHtml(folder.name)}</b>
+          <div class="agd-sub">Um link, sem senha. Quem tiver o link entra e vê só esta empresa, só para ler.</div></div>
+        <button class="agd-close" data-fechar-acesso>✕</button>
+      </div>
+      <div style="padding:18px 20px;">
+        <div id="acesso-corpo">
+          <button class="audit-btn" id="btn-gerar-acesso" style="margin:0;">
+            <span class="audit-btn-inner"><i class="fa-solid fa-link"></i> Gerar link de acesso</span>
+          </button>
+          <p class="modal-subtitle" style="margin-top:12px;font-size:12px;">
+            Gerar um link novo invalida o anterior. O link aparece uma vez só.
+          </p>
+        </div>
+        <div style="margin-top:18px;border-top:1px solid rgba(255,255,255,.08);padding-top:14px;">
+          <button class="header-btn danger-btn" id="btn-revogar-acesso"><i class="fa-solid fa-ban"></i> Revogar o acesso atual</button>
+        </div>
+      </div>
+    </div>`;
+  document.body.appendChild(ov);
+
+  ov.addEventListener('click', async (e) => {
+    if (e.target.closest('[data-fechar-acesso]') || e.target === ov) return ov.remove();
+
+    if (e.target.closest('#btn-gerar-acesso')) {
+      const corpo = ov.querySelector('#acesso-corpo');
+      corpo.innerHTML = '<p class="modal-subtitle">Gerando…</p>';
+      try {
+        const { caminho } = await Audasys.api.gerarAcesso(folder.id);
+        // A URL é montada aqui, com a origem de onde a tela foi aberta — assim o
+        // mesmo servidor serve localhost e produção sem variável de ambiente a mais.
+        const url = `${window.location.origin}${caminho}`;
+        corpo.innerHTML = `
+          <label style="font-size:12px;color:var(--text-secondary);">Mande este link para ${escapeHtml(folder.name)}:</label>
+          <input id="acesso-url" readonly value="${escapeHtml(url)}"
+            style="width:100%;margin-top:6px;padding:9px 11px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.15);border-radius:6px;color:#fff;font-size:12px;">
+          <button class="header-btn" id="btn-copiar-acesso" style="margin-top:10px;"><i class="fa-solid fa-copy"></i> Copiar</button>
+          <p class="modal-subtitle" style="margin-top:12px;font-size:12px;color:#fbbf24;">
+            Copie agora. Este link não é mostrado de novo — em disco fica só um resumo dele.
+          </p>`;
+        corpo.querySelector('#acesso-url').select();
+      } catch (err) {
+        corpo.innerHTML = `<div class="sc-erro">${escapeHtml(err.message)}</div>`;
+      }
+      return;
+    }
+
+    if (e.target.closest('#btn-copiar-acesso')) {
+      const campo = ov.querySelector('#acesso-url');
+      campo.select();
+      try { await navigator.clipboard.writeText(campo.value); } catch { document.execCommand('copy'); }
+      e.target.closest('button').innerHTML = '<i class="fa-solid fa-check"></i> Copiado';
+      return;
+    }
+
+    if (e.target.closest('#btn-revogar-acesso')) {
+      if (!confirm(`Revogar o acesso de ${folder.name}? O link que ela tem para de funcionar agora.`)) return;
+      try {
+        const r = await Audasys.api.revogarAcesso(folder.id);
+        ov.querySelector('#acesso-corpo').innerHTML = r.tinhaLink
+          ? '<p class="modal-subtitle">Acesso revogado. O link anterior não funciona mais.</p>'
+          : '<p class="modal-subtitle">Esta empresa não tinha link ativo.</p>';
+      } catch (err) {
+        alert(`Falha ao revogar: ${err.message}`);
+      }
+    }
+  });
+}
+
 function renderFolderDOM(folder, canvases, home) {
   const section = document.createElement('div');
   section.className = 'home-folder-section';
@@ -3188,10 +3282,16 @@ function renderFolderDOM(folder, canvases, home) {
     <i class="fa-solid fa-chevron-down home-folder-chevron"></i>
     <span class="home-folder-name" data-folder-id="${folder.id}">${folder.name}</span>
     <div class="home-folder-actions">
+      <button class="home-folder-action-btn link-acesso-btn" data-folder-id="${folder.id}" title="Gerar link de acesso do cliente"><i class="fa-solid fa-link"></i></button>
       <button class="home-folder-action-btn rename-folder-btn" data-folder-id="${folder.id}" title="Renomear empresa"><i class="fa-solid fa-pen"></i></button>
       <button class="home-folder-action-btn danger delete-folder-btn" data-folder-id="${folder.id}" title="Excluir empresa"><i class="fa-solid fa-trash-can"></i></button>
     </div>
   `;
+
+  header.querySelector('.link-acesso-btn')?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    abrirModalAcesso(folder);
+  });
 
   // Collapse toggle
   header.addEventListener('click', (e) => {
@@ -3621,6 +3721,34 @@ async function initApp() {
          <pre style="background:#1b2029;padding:12px 18px;border-radius:8px;display:inline-block;margin-top:12px">npm start</pre>
          </div></div>`);
     return;
+  }
+
+  /**
+   * Quem está do outro lado — antes de qualquer chamada de dado.
+   *
+   * Sem isto, a primeira coisa que um visitante sem sessão veria seria um erro
+   * de "falha ao carregar a lista de canvases", que não diz nada e assusta. E o
+   * cliente pediria `/api/home`, que é de admin, e levaria 403 na cara.
+   */
+  let sessao;
+  try {
+    sessao = await Audasys.api.sessao();
+  } catch {
+    sessao = { autenticado: false };
+  }
+  if (!sessao.autenticado) {
+    window.location.href = '/entrar.html';
+    return;
+  }
+  window.papelDaSessao = sessao.papel;
+  window.clienteDaSessao = sessao.clientId;
+  if (sessao.papel === 'cliente') {
+    // O servidor é quem barra de verdade (403 em tudo que não for GET no próprio
+    // cliente). Esta classe só evita oferecer botão que vai falhar — esconder é
+    // cortesia, não segurança.
+    document.body.classList.add('modo-leitura');
+    activeClientId = sessao.clientId;
+    window.activeClientId = sessao.clientId;
   }
 
   try {

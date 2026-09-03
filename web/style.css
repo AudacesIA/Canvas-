@@ -3505,3 +3505,37 @@ input.ev-meio, textarea.ev-meio, select.ev-meio { color: #c2c9d6; }
   font-size: 12px;
   line-height: 1.5;
 }
+
+/* ── Modo leitura: o que o cliente vê ─────────────────────────────────────────
+   Esconder é cortesia, não segurança — quem barra é o servidor, que devolve 403
+   em qualquer escrita. Isto existe só para não oferecer botão que vai falhar.  */
+body.modo-leitura .node-palette,
+body.modo-leitura .properties-panel,
+body.modo-leitura #header-tools-dropdown-wrapper,
+body.modo-leitura #btn-chat-toggle,
+body.modo-leitura #btn-audit,
+body.modo-leitura .btn-novo-cenario-home,
+body.modo-leitura .canvas-card-menu,
+body.modo-leitura .canvas-home-card.add-card,
+body.modo-leitura .op-cenario-btn,
+body.modo-leitura .op-selo-falta {
+  display: none !important;
+}
+
+/* O canvas ocupa a largura toda quando não há paleta nem painel. */
+body.modo-leitura #canvas-viewport { left: 0; right: 0; }
+
+.selo-leitura {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  color: #93c5fd;
+  background: rgba(59, 130, 246, .12);
+  border: 1px solid rgba(59, 130, 246, .3);
+}

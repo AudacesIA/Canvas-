@@ -115,6 +115,62 @@ export class CanvasService {
     );
   }
 
+  /**
+   * Gera o link de acesso do cliente. Devolve o token EM CLARO uma única vez.
+   *
+   * Em disco fica só o hash. Se o `data/` vazar — backup, sincronização, print da
+   * pasta — ninguém entra com o que está lá. É a mesma disciplina de chave de API
+   * de qualquer serviço: você vê uma vez, guarda, e o servidor nunca mais mostra.
+   *
+   * Gerar de novo SUBSTITUI o hash, o que mata o link anterior. Não há dois links
+   * válidos ao mesmo tempo de propósito: dois links é o começo de não saber
+   * quantos existem.
+   */
+  async gerarAcesso(clientId) {
+    const { novoToken, hashDoToken } = await import('../http/sessao.js');
+    const atual = await this.storage.readClient(clientId);
+    if (!atual) throw httpError(404, `Cliente ${clientId} não encontrado`);
+    const token = novoToken();
+    await this.storage.writeClient(clientId, {
+      ...atual,
+      acesso: { hash: hashDoToken(token), criadoEm: new Date().toISOString(), ultimoUso: null },
+    });
+    return { token, clientId, nome: atual.name };
+  }
+
+  /** Apaga o hash: o link em circulação para de funcionar na hora. */
+  async revogarAcesso(clientId) {
+    const atual = await this.storage.readClient(clientId);
+    if (!atual) throw httpError(404, `Cliente ${clientId} não encontrado`);
+    const { acesso, ...resto } = atual;
+    await this.storage.writeClient(clientId, resto);
+    return { revogado: clientId, tinhaLink: !!acesso?.hash };
+  }
+
+  /**
+   * De qual cliente é este token?
+   *
+   * Varre os clientes comparando hashes. Varredura porque o token sozinho não diz
+   * a quem pertence — e é assim de propósito: um link que carregasse o id do
+   * cliente entregaria, a quem só olhasse a URL, que existe uma empresa com aquele
+   * nome sendo mapeada. Com dois dígitos de clientes o custo é irrelevante.
+   */
+  async clientePorToken(token) {
+    if (!token) return null;
+    const { tokenConfere } = await import('../http/sessao.js');
+    for (const c of await this.storage.listClients()) {
+      const meta = await this.storage.readClient(c.id);
+      if (meta?.acesso?.hash && tokenConfere(token, meta.acesso.hash)) {
+        await this.storage.writeClient(c.id, {
+          ...meta,
+          acesso: { ...meta.acesso, ultimoUso: new Date().toISOString() },
+        });
+        return { clientId: c.id, nome: meta.name };
+      }
+    }
+    return null;
+  }
+
   async deleteClient(clientId) {
     const ids = await this.storage.listCanvasIds(clientId);
     for (const id of ids) await this.storage.deleteCanvas(clientId, id);
