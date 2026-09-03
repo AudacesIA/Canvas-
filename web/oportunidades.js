@@ -108,10 +108,15 @@
     const status = STATUS_LABELS[op.status || 'ideia'] || STATUS_LABELS.ideia;
     const previa = (op.markdown || '').split('\n').filter((l) => l.trim())[0] || 'Sem anotações detalhadas';
 
-    const cenarioBtn = op.cenarioId
-      ? `<button class="op-cenario-btn active" data-abrir-cenario="${op.cenarioId}" title="Abrir cenário já simulado"><i class="fa-solid fa-arrow-up-right-from-square"></i> Ver Cenário</button>`
-      : `<button class="op-cenario-btn" data-simular-op="${op.id}" title="Simular cenário derivado desta oportunidade"><i class="fa-solid fa-bolt"></i> Simular</button>
-         <button class="op-cenario-btn" data-copilot-op="${op.id}" style="background:rgba(96,165,250,0.15);color:#60a5fa;" title="Simular com Copilot IA"><i class="fa-solid fa-wand-magic-sparkles"></i> Copilot</button>`;
+    /**
+     * "Simular" sempre disponível: uma oportunidade não é mais dona de um
+     * cenário, então não há estado "já simulada" que justifique esconder o botão.
+     * `cenarioId` sobrevive em canvases antigos e vira só um atalho a mais.
+     */
+    const cenarioBtn = `
+      <button class="op-cenario-btn" data-simular-op="${op.id}" title="Simular um cenário a partir desta ideia"><i class="fa-solid fa-bolt"></i> Simular</button>
+      <button class="op-cenario-btn" data-copilot-op="${op.id}" style="background:rgba(96,165,250,0.15);color:#60a5fa;" title="Simular com Copilot IA"><i class="fa-solid fa-wand-magic-sparkles"></i> Copilot</button>
+      ${op.cenarioId ? `<button class="op-cenario-btn active" data-abrir-cenario="${op.cenarioId}" title="Abrir o cenário que foi criado a partir desta ideia"><i class="fa-solid fa-arrow-up-right-from-square"></i> Ver</button>` : ''}`;
 
     const potReceita = op.potencialReceita
       ? `<div style="font-size:11px; color:#34d399; font-weight:700; margin: 4px 0;"><i class="fa-solid fa-sack-dollar"></i> ${escapeHtml(op.potencialReceita)}</div>`
@@ -261,14 +266,10 @@
           <p class="modal-subtitle">Deriva uma simulação visual (To-Be) a partir do Mapa de Processos oficial.</p>
         </div>
         <div class="modal-body" style="padding: 16px 0;">
-          ${op ? '' : `
+          ${op ? `
           <div class="panel-section" style="margin-bottom:14px;">
-            <label for="sc-oportunidade">Oportunidade que este cenário pré-valida:</label>
-            <select id="sc-oportunidade" style="width:100%;margin-top:6px;padding:8px 12px;background:rgba(15,23,42,0.9);border:1px solid rgba(255,255,255,0.15);border-radius:6px;color:#fff;">
-              <option value="">Carregando oportunidades...</option>
-            </select>
-            <p class="modal-subtitle" style="margin-top:6px;font-size:11px;">Todo cenário testa uma oportunidade, e cada oportunidade tem no máximo um cenário.</p>
-          </div>`}
+            <p class="modal-subtitle" style="font-size:12px;">Nasce da oportunidade <strong>${escapeHtml(op.titulo)}</strong> — fica registrado de onde a ideia saiu.</p>
+          </div>` : ''}
           <div class="panel-section">
             <label for="sc-premissa">Premissa do Cenário (A frase-guia):</label>
             <input type="text" id="sc-premissa" value="${escapeHtml(tituloOp)}" placeholder="Ex: Terceirizar logística Sul com operador parceiro" style="width:100%;margin-top:6px;padding:8px 12px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.15);border-radius:6px;color:#fff;">
@@ -297,36 +298,53 @@
     window.abrirOverlay?.(modal);
 
     /**
-     * Preenche o seletor quando o modal foi aberto SEM oportunidade — o caminho
-     * do card da Home e do comparador, que partem do Processo Real.
+     * Etapas reais da criação, em vez de uma bolinha girando.
      *
-     * O servidor exige `oportunidadeId` e recusa com 422 sem ele; até aqui esses
-     * dois botões mandavam `null` e quebravam. A lista vem do pareamento, não do
-     * canvas: é ela que diz quais oportunidades JÁ têm cenário, e a regra é 1:1 —
-     * oferecer uma já usada só produziria um 409 depois do clique.
+     * Criar cenário é uma operação de quatro passos: descarregar o autosave,
+     * registrar o baseline se faltar, clonar o processo e abrir o resultado. O
+     * POST em si leva ~30ms num canvas de 18 nós — a espera que o consultor
+     * sente vem do `flush()`, que aguarda gravação de verdade em disco.
+     *
+     * Etapa nomeada em vez de spinner genérico porque quando travar, tem que dar
+     * para dizer ONDE travou. Spinner que gira para sempre é a versão animada do
+     * botão morto que este modal já teve.
      */
-    if (!op) {
-      const seletor = modal.querySelector('#sc-oportunidade');
-      const btnCriar = modal.querySelector('#btn-executar-criacao-cenario');
-      Audasys.api.listarCenarios(effClientId, effCanvasId).then((pareamento) => {
-        const livres = pareamento.oportunidades.filter((l) => !l.cenario);
-        if (!livres.length) {
-          const nenhuma = pareamento.oportunidades.length
-            ? 'Todas as oportunidades já têm cenário'
-            : 'Nenhuma oportunidade mapeada neste processo';
-          seletor.innerHTML = `<option value="">${escapeHtml(nenhuma)}</option>`;
-          btnCriar.disabled = true;
-          btnCriar.title = `${nenhuma}. Mapeie uma oportunidade numa passagem de bastão para simular um cenário.`;
-          return;
-        }
-        seletor.innerHTML = livres
-          .map((l) => `<option value="${escapeHtml(l.oportunidade.id)}">${escapeHtml(l.oportunidade.titulo || l.oportunidade.id)}</option>`)
-          .join('');
-      }).catch((err) => {
-        console.warn('[oportunidades] pareamento indisponível:', err.message);
-        seletor.innerHTML = '<option value="">Não foi possível carregar</option>';
-        btnCriar.disabled = true;
-      });
+    const ETAPAS = [
+      ['flush', 'salvando alterações pendentes'],
+      ['fork', 'clonando o processo'],
+      ['abrir', 'abrindo o cenário'],
+    ];
+    function progresso(modal) {
+      const corpo = modal.querySelector('.modal-body');
+      // O formulário volta inteiro se der erro: sem isto, "tentar de novo" leria
+      // `#sc-premissa` de um DOM que o progresso já tinha substituído, e o retry
+      // morreria com TypeError em vez de repetir a chamada.
+      const formulario = corpo.innerHTML;
+      corpo.innerHTML = `<div class="sc-progresso">${ETAPAS.map(([id, rotulo]) => `
+        <div class="sc-etapa" data-etapa="${id}">
+          <i class="sc-marca fa-regular fa-circle"></i><span>${rotulo}</span>
+        </div>`).join('')}</div>`;
+      return {
+        emCurso(id) {
+          const el = corpo.querySelector(`[data-etapa="${id}"]`);
+          if (el) { el.classList.add('ativa'); el.querySelector('.sc-marca').className = 'sc-marca fa-solid fa-circle-notch fa-spin'; }
+        },
+        feita(id) {
+          const el = corpo.querySelector(`[data-etapa="${id}"]`);
+          if (el) { el.classList.remove('ativa'); el.classList.add('pronta'); el.querySelector('.sc-marca').className = 'sc-marca fa-solid fa-circle-check'; }
+        },
+        /** Devolve a etapa em curso — é ela que diz onde quebrou. */
+        emQual() {
+          return corpo.querySelector('.sc-etapa.ativa')?.dataset.etapa ?? null;
+        },
+        falhou(id, msg) {
+          const el = corpo.querySelector(`[data-etapa="${id}"]`);
+          if (el) { el.classList.remove('ativa'); el.classList.add('falhou'); el.querySelector('.sc-marca').className = 'sc-marca fa-solid fa-circle-xmark'; }
+          const rotulo = ETAPAS.find(([e]) => e === id)?.[1] ?? 'criar o cenário';
+          const diagnostico = `<div class="sc-erro"><strong>Falhou ao ${escapeHtml(rotulo)}.</strong><br>${escapeHtml(msg)}</div>`;
+          corpo.innerHTML = diagnostico + formulario;
+        },
+      };
     }
 
     modal.addEventListener('click', async (e) => {
@@ -340,52 +358,48 @@
         const nome = modal.querySelector('#sc-nome').value.trim() || undefined;
 
         if (!premissa) {
-          alert('Por favor, informe a premissa do cenário.');
-          return;
-        }
-
-        const oportunidadeId = op?.id || modal.querySelector('#sc-oportunidade')?.value || '';
-        if (!oportunidadeId) {
-          alert('Escolha a oportunidade de receita que este cenário pré-valida.');
+          alert('Informe a premissa do cenário — é a frase que o originou.');
           return;
         }
 
         const btn = modal.querySelector('#btn-executar-criacao-cenario');
         btn.disabled = true;
-        btn.innerHTML = '<span class="audit-btn-inner"><i class="fa-solid fa-spinner fa-spin"></i> Criando Cenário...</span>';
+        btn.innerHTML = '<span class="audit-btn-inner"><i class="fa-solid fa-circle-notch fa-spin"></i> Criando…</span>';
+        modal.querySelector('[data-fechar-modal]')?.setAttribute('disabled', '');
+        const passo = progresso(modal);
 
         try {
           /**
            * Descarrega o autosave antes de forkar.
            *
            * O fork lê o canvas EM DISCO. Uma oportunidade escrita há menos de
-           * 800ms ainda está no debounce, e o servidor recusaria com "não existe
-           * oportunidade" — erro que não reproduz testando devagar e acontece
-           * na frente do cliente. `flush()` só resolve quando o disco tem o dado.
+           * 800ms ainda está no debounce, e o servidor leria o canvas sem ela —
+           * erro que não reproduz testando devagar e acontece na frente do
+           * cliente. `flush()` só resolve quando o disco tem o dado, e é a etapa
+           * onde a espera de fato mora.
            */
+          passo.emCurso('flush');
           await Audasys.persistence.flush();
+          passo.feita('flush');
 
+          passo.emCurso('fork');
           const { canvas: cenario } = await Audasys.api.criarCenario(effClientId, effCanvasId, {
             nome,
             premissa,
             postura,
-            oportunidadeId,
+            // Procedência, não requisito: só vai quando o modal nasceu de um card.
+            oportunidadeId: op?.id ?? null,
           });
+          passo.feita('fork');
 
-          if (op) {
-            op.cenarioId = cenario.id;
-            op.status = 'simulado';
-            op.posturaSugerida = postura;
-            if (window.saveToLocalStorage) window.saveToLocalStorage();
-            renderTodos();
-          }
-
+          passo.emCurso('abrir');
           modal.remove();
           if (window.openCanvas) window.openCanvas(cenario.id);
         } catch (err) {
-          alert(`Falha ao criar cenário: ${err.message}`);
+          passo.falhou(passo.emQual() ?? 'fork', err.message);
           btn.disabled = false;
-          btn.innerHTML = '<span class="audit-btn-inner"><i class="fa-solid fa-wand-magic-sparkles"></i> Criar e Abrir Cenário</span>';
+          btn.innerHTML = '<span class="audit-btn-inner"><i class="fa-solid fa-rotate-right"></i> Tentar de novo</span>';
+          modal.querySelector('[data-fechar-modal]')?.removeAttribute('disabled');
         }
       }
     });
@@ -512,17 +526,15 @@
   }
 
   /**
-   * O Hub: uma linha por oportunidade, com o cenário que a pré-valida.
+   * O Hub: uma linha por oportunidade de receita.
    *
-   * ── Por que a contagem não pode divergir ────────────────────────────────────
-   * A regra é um cenário por oportunidade. A forma de garantir isso não é somar
-   * dos dois lados e comparar — é NÃO EXISTIR um segundo lado. Esta lista itera
-   * `oportunidades` e nada mais; o cenário é um campo de cada linha, presente ou
-   * ausente. Não há coleção de cenários de onde um número diferente possa sair.
+   * Já foi um pareamento oportunidade × cenário, de quando valia a regra 1:1.
+   * Não vale mais: as duas coisas são independentes, e insistir em casá-las na
+   * tela reintroduziria na cabeça do consultor um vínculo que o dado não tem.
    *
-   * O servidor devolve o pareamento já montado (`GET …/cenarios`), resolvido
-   * contra os `derivadoDe` reais — então mesmo com o cache `op.cenarioId` sujo, o
-   * que aparece na tela é o que existe em disco.
+   * A lista vem do servidor (`GET …/cenarios`) e cai para o estado local se o
+   * daemon não responder — perder a contagem de cenários é aceitável; perder o
+   * acesso ao que já foi escrito na frente do cliente não é.
    */
   async function abrirLista() {
     document.getElementById('op-lista-overlay')?.remove();
@@ -551,30 +563,24 @@
       console.warn('[oportunidades] pareamento indisponível:', err.message);
     }
 
-    const linhas = pareamento
-      ? pareamento.oportunidades
-      : oportunidades.map((o) => ({ oportunidade: o, cenario: null }));
+    const linhas = pareamento ? pareamento.oportunidades : oportunidades;
 
-    const selo = (cenario, op) => {
-      if (!pareamento) return '';
-      if (cenario) {
-        return `<button class="op-selo op-selo-tem" data-abrir-cenario="${cenario.id}"
-                  title="Abrir o cenário">cenário: ${escapeHtml(cenario.name)}
-                  <span class="op-postura">${escapeHtml(cenario.derivadoDe?.postura ?? '')}</span></button>`;
-      }
-      return `<button class="op-selo op-selo-falta" data-gerar-cenario="${op.id}"
-                title="Desenhar o cenário que testa esta oportunidade">gerar cenário</button>`;
-    };
+    /**
+     * Uma oportunidade não "tem" mais um cenário — as duas coisas são
+     * independentes. O que sobrou é o convite: dá para simular a partir desta
+     * ideia, e o cenário nascido dela guarda a procedência no `derivadoDe`.
+     */
+    const selo = (o) => `<button class="op-selo op-selo-falta" data-gerar-cenario="${o.id}"
+        title="Simular um cenário a partir desta ideia">simular</button>`;
 
     const cabecalho = pareamento
-      ? `${pareamento.total} oportunidade(s) · ${pareamento.comCenario} com cenário`
+      ? `${pareamento.totalOportunidades} oportunidade(s) · ${pareamento.totalCenarios} cenário(s) neste processo`
       : `${oportunidades.length} mapeada(s) neste canvas`;
 
-    const orfaos = pareamento?.orfaos?.length
-      ? `<div class="op-orfaos">⚠ ${pareamento.orfaos.length} cenário(s) sem oportunidade correspondente:
-           ${pareamento.orfaos.map((c) => escapeHtml(c.name)).join(', ')}. A oportunidade que os
-           originou foi apagada — o desenho continua no disco, mas ninguém sabe mais que pergunta
-           ele responde.</div>`
+    const desancoradas = linhas.filter((o) => o.desancorada).length;
+    const orfaos = desancoradas
+      ? `<div class="op-orfaos">⚠ ${desancoradas} oportunidade(s) perderam a passagem de origem.
+           O texto continua aqui; reancore numa aresta para elas voltarem ao mapa.</div>`
       : '';
 
     ov.innerHTML = `
@@ -585,7 +591,7 @@
           <button class="agd-close" data-fechar-lista>✕</button>
         </div>
         ${orfaos}
-        <div class="op-lista">${linhas.map(({ oportunidade: o, cenario }) => {
+        <div class="op-lista">${linhas.map((o) => {
           const postura = POSTURA_LABELS[o.posturaSugerida || 'realista'] || POSTURA_LABELS.realista;
           const status = STATUS_LABELS[o.status || 'ideia'] || STATUS_LABELS.ideia;
           return `
@@ -596,7 +602,7 @@
             </div>
             <div class="op-lista-cabeca">
               <div class="op-card-titulo" data-abrir-op="${o.id}">${escapeHtml(o.titulo)}</div>
-              ${selo(cenario, o)}
+              ${selo(o)}
             </div>
             <div class="op-lista-onde" data-abrir-op="${o.id}">${escapeHtml(ondeFica(o))}</div>
             <div class="markdown-body op-lista-corpo" data-abrir-op="${o.id}">${AudasysMarkdown.render(o.markdown || '_sem anotação_')}</div>

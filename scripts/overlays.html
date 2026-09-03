@@ -62,14 +62,37 @@ try{
  await until(()=>D().getElementById('simular-cenario-modal'));
  await conferirVisivel(W,D,'simular-cenario-modal','modal de cenário');
 
- // sem oportunidade escolhida o servidor recusaria: o seletor precisa vir cheio
- const okSel=await until(()=>{const s=D().getElementById('sc-oportunidade');return s&&s.options.length&&s.options[0].value;},2500);
- ck('seletor traz a oportunidade livre',okSel,D().getElementById('sc-oportunidade')?.options[0]?.textContent);
+ // nao existe mais seletor de oportunidade: cenario e oportunidade sao separados
+ ck('sem seletor de oportunidade',!D().getElementById('sc-oportunidade'));
+ ck('botao habilitado de saida',!D().getElementById('btn-executar-criacao-cenario').disabled);
+ D().getElementById('simular-cenario-modal')?.remove();
+
+ // 1b. o caso do print: canvas SEM nenhuma oportunidade mapeada
+ const {canvas:seco}=await api('POST',`/api/clients/${cid}/canvases`,{name:'Sem oportunidades'});
+ await api('PUT',`/api/clients/${cid}/canvases/${seco.id}`,{nodes:[
+   {id:'n1',name:'Vender',type:'action',x:80,y:200},{id:'n2',name:'Entregar',type:'action',x:420,y:200}],
+  connections:[{id:'e1',from:'n1',to:'n2'}],oportunidades:[],breakpoints:[],notes:[]});
+ W.AudasysOportunidades.abrirModalCriarCenario(null,seco.id);
+ await until(()=>D().getElementById('simular-cenario-modal'));
+ const btn=D().getElementById('btn-executar-criacao-cenario');
+ ck('canvas sem oportunidade: botao NAO travado',!btn.disabled);
+ D().getElementById('sc-premissa').value='E se usassemos um aplicativo para fazer a venda';
+ const antes=(await api('GET',`/api/clients/${cid}/canvases`)).canvases.length;
+ btn.click();
+ // etapas nomeadas aparecem enquanto cria
+ ck('mostra progresso por etapas',await until(()=>D().querySelector('.sc-progresso'),3000));
+ const criou=await until(async()=>{
+   const l=(await api('GET',`/api/clients/${cid}/canvases`)).canvases;
+   return l.length===antes+1&&l.some(c=>c.derivadoDe&&c.derivadoDe.canvasId===seco.id);
+ },8000);
+ ck('CENARIO FOI CRIADO sem oportunidade nenhuma',criou);
+ const cv=(await api('GET',`/api/clients/${cid}/canvases`)).canvases.find(c=>c.derivadoDe&&c.derivadoDe.canvasId===seco.id);
+ if(cv) ck('premissa gravada no cenario',cv.derivadoDe.premissa==='E se usassemos um aplicativo para fazer a venda',cv.derivadoDe.premissa);
  D().getElementById('simular-cenario-modal')?.remove();
 
  // 2. comparador, sobre um cenário de verdade
  const {canvas:cen}=await api('POST',`/api/clients/${cid}/canvases/${canvas.id}/cenarios`,
-   {premissa:'e se a coleta fosse na origem?',postura:'otimista',oportunidadeId:'op1'});
+   {premissa:'e se a coleta fosse na origem?',postura:'otimista'});
  W.AudasysComparador.abrirModalComparador(cid,cen.id);
  await until(()=>D().getElementById('comparador-modal'));
  await conferirVisivel(W,D,'comparador-modal','comparador');

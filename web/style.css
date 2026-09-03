@@ -3468,3 +3468,43 @@ input.ev-meio, textarea.ev-meio, select.ev-meio { color: #c2c9d6; }
   .logo-text { font-size: 0; }
   .header-filter select { max-width: 110px; }
 }
+
+/* ── Progresso da criação de cenário ──────────────────────────────────────────
+   Etapa nomeada em vez de spinner: quando trava, dá para dizer ONDE travou.    */
+.sc-progresso {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 22px 4px;
+}
+
+.sc-etapa {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  opacity: 0.45;
+  transition: opacity 0.25s ease, color 0.25s ease;
+}
+
+.sc-etapa.ativa { opacity: 1; color: #e2e8f0; }
+.sc-etapa.pronta { opacity: 0.8; }
+.sc-etapa.falhou { opacity: 1; color: #f87171; }
+
+.sc-marca { width: 16px; text-align: center; }
+.sc-etapa.ativa .sc-marca { color: #60a5fa; }
+.sc-etapa.pronta .sc-marca { color: #34d399; }
+.sc-etapa.falhou .sc-marca { color: #f87171; }
+
+.sc-erro {
+  margin: 0 0 16px;
+  padding: 10px 12px;
+  border: 1px solid rgba(248, 113, 113, 0.35);
+  border-left-width: 3px;
+  border-radius: 6px;
+  background: rgba(248, 113, 113, 0.08);
+  color: #fca5a5;
+  font-size: 12px;
+  line-height: 1.5;
+}
