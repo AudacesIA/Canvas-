@@ -47,7 +47,7 @@ try{
  // primeira chamada de dado seria 401 e todo o resto falharia por tabela.
  await api('POST','/api/entrar',{chave:new URLSearchParams(location.search).get('k')||''});
  // Só agora o iframe pode carregar: o app checa a sessão no boot e, sem ela,
- // redireciona para /entrar.html — o teste ficaria olhando a tela de login.
+ // redireciona para /login — o teste ficaria olhando a tela de login.
  document.getElementById('f').src='/';
  const {client}=await api('POST','/api/clients',{name:'ZZ Overlays'});
  const cid=client.id;

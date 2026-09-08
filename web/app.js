@@ -6,6 +6,7 @@ window.OverlayManager = {
     if (except !== 'cenarios') document.getElementById('cenarios-lista-overlay')?.remove();
     if (except !== 'oportunidades') document.getElementById('op-lista-overlay')?.remove();
     if (except !== 'comparador') document.getElementById('comparador-modal')?.remove();
+    if (except !== 'notificacoes') document.getElementById('notificacoes-overlay')?.remove();
     if (except !== 'notepad') document.getElementById('op-notepad-modal')?.remove();
     if (except !== 'cenario-criar') document.getElementById('op-cenario-overlay')?.remove();
     if (except !== 'audit') document.getElementById('audit-modal')?.classList.remove('open');
@@ -3239,6 +3240,123 @@ async function copiarLinkDeAcesso(botao, campo) {
 }
 
 /**
+ * A sineta: o que exige decisão do consultor.
+ *
+ * Três coisas chegam aqui — cliente que perdeu o link, IP bloqueado após cinco
+ * tentativas, e aviso de tentativas na chave de admin. Nenhuma delas o sistema
+ * resolve sozinho: só o consultor sabe se quem pediu acesso é mesmo quem diz ser.
+ *
+ * Consulta periódica em vez do canal de eventos: o SSE que existe é por canvas, e
+ * um pedido de acesso não pertence a canvas nenhum.
+ */
+let notificacoesPendentes = [];
+
+async function atualizarNotificacoes() {
+  if (window.papelDaSessao === 'cliente') return;
+  try {
+    const { notificacoes } = await Audasys.api.notificacoes();
+    notificacoesPendentes = notificacoes ?? [];
+  } catch { return; }
+  const badge = document.getElementById('notif-count-badge');
+  if (!badge) return;
+  badge.textContent = String(notificacoesPendentes.length);
+  badge.style.display = notificacoesPendentes.length ? '' : 'none';
+  const painel = document.getElementById('notificacoes-overlay');
+  if (painel) desenharNotificacoes(painel);
+}
+
+function desenharNotificacoes(ov) {
+  const ICONE = {
+    recuperacao: '<i class="fa-solid fa-key" style="color:#fbbf24;"></i>',
+    bloqueio: '<i class="fa-solid fa-ban" style="color:#f87171;"></i>',
+    'tentativas-admin': '<i class="fa-solid fa-triangle-exclamation" style="color:#f87171;"></i>',
+  };
+  const linhas = notificacoesPendentes.map((n) => {
+    // A ação vem do tipo: pedido de acesso se resolve gerando link novo, IP
+    // bloqueado se resolve liberando. Botão genérico obrigaria o consultor a
+    // lembrar o que fazer com cada um.
+    const acao = n.tipo === 'recuperacao' && n.clientId
+      ? `<button class="arb-btn primary" data-gerar-para="${n.clientId}" data-notif="${n.id}">gerar link novo</button>`
+      : n.tipo === 'bloqueio'
+        ? `<button class="arb-btn primary" data-liberar="${n.id}">liberar acesso</button>`
+        : '';
+    return `
+      <div class="notif-item" data-item="${n.id}">
+        <div class="notif-cabeca">
+          ${ICONE[n.tipo] ?? ''}
+          <b>${escapeHtml(n.titulo)}</b>
+          ${n.ocorrencias > 1 ? `<span class="badge-pill">${n.ocorrencias}×</span>` : ''}
+          <span class="notif-quando">${formatDate(n.criadaEm)}</span>
+        </div>
+        <div class="notif-detalhe">${escapeHtml(n.detalhe)}</div>
+        <div class="notif-acoes">${acao}
+          <button class="arb-btn" data-dispensar="${n.id}">dispensar</button></div>
+      </div>`;
+  }).join('');
+
+  ov.querySelector('.notif-lista').innerHTML = linhas
+    || '<div class="qd-vazia">Nada pendente. Pedidos de acesso e bloqueios aparecem aqui.</div>';
+}
+
+function abrirNotificacoes() {
+  const existente = document.getElementById('notificacoes-overlay');
+  if (existente) { existente.remove(); return; }
+  window.OverlayManager?.closeAll('notificacoes');
+
+  const ov = document.createElement('div');
+  ov.id = 'notificacoes-overlay';
+  ov.className = 'esc-overlay';
+  ov.innerHTML = `
+    <div class="qd-box" style="max-width:560px;">
+      <div class="esc-head">
+        <div><b>Notificações</b>
+          <div class="agd-sub">Pedidos de acesso e bloqueios aguardando sua decisão.</div></div>
+        <button class="agd-close" data-fechar-notif>✕</button>
+      </div>
+      <div class="notif-lista" style="padding:12px 20px 20px;"></div>
+    </div>`;
+  document.body.appendChild(ov);
+  desenharNotificacoes(ov);
+
+  ov.addEventListener('click', async (e) => {
+    if (e.target.closest('[data-fechar-notif]') || e.target === ov) return ov.remove();
+    if (e.target.closest('[data-copiar-link]')) {
+      await copiarLinkDeAcesso(e.target.closest('button'), ov.querySelector('.campo-link-acesso'));
+      return;
+    }
+
+    const gerar = e.target.closest('[data-gerar-para]');
+    if (gerar) {
+      const { gerarPara, notif } = gerar.dataset;
+      const item = ov.querySelector(`[data-item="${notif}"]`);
+      const empresa = homeCache.folders.find((f) => f.id === gerarPara)?.name ?? gerarPara;
+      try {
+        const { caminho } = await Audasys.api.gerarAcesso(gerarPara);
+        await Audasys.api.resolverNotificacao(notif);
+        item.innerHTML = blocoDoLink(caminho, empresa);
+        item.querySelector('.campo-link-acesso').select();
+      } catch (err) {
+        item.insertAdjacentHTML('beforeend', `<div class="sc-erro">${escapeHtml(err.message)}</div>`);
+      }
+      return;
+    }
+
+    const liberar = e.target.closest('[data-liberar]')?.dataset.liberar;
+    if (liberar) {
+      try { await Audasys.api.liberarIp(liberar); } catch (err) { alert(err.message); }
+      await atualizarNotificacoes();
+      return;
+    }
+
+    const dispensar = e.target.closest('[data-dispensar]')?.dataset.dispensar;
+    if (dispensar) {
+      try { await Audasys.api.resolverNotificacao(dispensar); } catch { /* já resolvida */ }
+      await atualizarNotificacoes();
+    }
+  });
+}
+
+/**
  * Card de nova empresa: nome e link no mesmo gesto.
  *
  * Antes era `prompt('Nome da empresa:')` e o link vinha depois, noutro lugar —
@@ -3787,6 +3905,7 @@ async function moveCanvas(canvasId, fromFolderId, toFolderId) {
 document.getElementById('btn-back-home').addEventListener('click', closeCanvas);
 
 document.getElementById('home-btn-new-folder').addEventListener('click', abrirModalNovaEmpresa);
+document.getElementById('btn-notificacoes')?.addEventListener('click', abrirNotificacoes);
 
 document.getElementById('home-btn-new-canvas').addEventListener('click', () => {
   const home = loadHomeData();
@@ -3836,7 +3955,7 @@ async function initApp() {
     sessao = { autenticado: false };
   }
   if (!sessao.autenticado) {
-    window.location.href = '/entrar.html';
+    window.location.href = '/login';
     return;
   }
   window.papelDaSessao = sessao.papel;
@@ -3855,6 +3974,14 @@ async function initApp() {
   } catch (err) {
     reportError('carregar a lista de canvases', err);
     return;
+  }
+
+  if (sessao.papel === 'admin') {
+    atualizarNotificacoes();
+    // Um minuto: pedido de acesso é assíncrono por natureza — o cliente liga
+    // depois de pedir. Consultar de segundo em segundo gastaria bateria para
+    // adiantar nada.
+    setInterval(atualizarNotificacoes, 60_000);
   }
 
   showHomeView();

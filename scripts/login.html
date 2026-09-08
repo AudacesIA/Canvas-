@@ -23,7 +23,7 @@ try{
  const f=document.getElementById('f'), D=()=>f.contentDocument, W=()=>f.contentWindow;
 
  // ── a tela de entrada ────────────────────────────────────────────────────
- f.src='/entrar.html';
+ f.src='/login';
  await until(()=>D()&&D().getElementById('form-cliente'));
  ck('tela tem as duas abas', !!D().getElementById('aba-admin') && !!D().getElementById('aba-cliente'));
  ck('admin é a aba inicial', D().getElementById('form-admin').classList.contains('ativo'));
@@ -43,11 +43,21 @@ try{
  ck('recusa texto qualquer',       extrair('oi, manda o link')===null);
  ck('recusa vazio',                extrair('   ')===null);
 
- // erro de formato avisa em vez de navegar
+ ck('cliente pede empresa E senha', !!D().getElementById('empresa') && !!D().getElementById('codigo'));
+ ck('tem botão de recuperar senha', !!D().getElementById('btn-esqueci'));
+
+ // erro de formato avisa em vez de enviar
+ D().getElementById('empresa').value='Alguma Empresa';
  D().getElementById('codigo').value='isso não é um link';
  D().getElementById('form-cliente').querySelector('button').click();
- ck('formato inválido mostra aviso', await until(()=>D().querySelector('.entrar-aviso'),2000),
-    D().querySelector('.entrar-aviso')?.textContent.trim().slice(0,44));
+ ck('senha em formato inválido avisa', await until(()=>D().querySelector('.entrar-aviso'),2000),
+    D().querySelector('.entrar-aviso')?.textContent.trim().slice(0,40));
+
+ // painel de recuperação
+ D().getElementById('btn-esqueci').click();
+ ck('recuperação abre seu painel', D().getElementById('form-recuperar').classList.contains('ativo'));
+ D().getElementById('btn-voltar-login').click();
+ ck('voltar traz o login de volta', D().getElementById('form-cliente').classList.contains('ativo'));
 
  // ── criar empresa pelo card, com link junto ──────────────────────────────
  await api('POST','/api/entrar',{chave:window.CHAVE});
@@ -69,13 +79,29 @@ try{
  ck('aviso de que só aparece uma vez',
     /não é mostrado de novo/i.test(D().getElementById('nova-corpo').textContent));
 
- // ── o link criado funciona de ponta a ponta ──────────────────────────────
+ // ── o link NÃO entra mais sozinho: agora é só a senha ────────────────────
  const codigo=extrair(url);
  await api('POST','/api/sair');
  await fetch(`/e/${codigo}`,{redirect:'follow'});
- const s=await api('GET','/api/sessao');
- ck('o link entra como cliente da empresa certa', s.papel==='cliente', s.papel+':'+s.clientId);
+ let s=await api('GET','/api/sessao');
+ ck('link sozinho NÃO loga mais', !s.autenticado, 'papel='+s.papel);
+ const pend=await api('GET','/api/senha-pendente');
+ ck('mas deixa a senha pronta para a tela', pend.senha===codigo);
+
+ // senha certa com empresa errada não entra
+ const tenta=async(empresa,senha)=>(await fetch('/api/entrar-cliente',{method:'POST',
+   headers:{'Content-Type':'application/json'},body:JSON.stringify({empresa,senha})})).status;
+ ck('senha certa + empresa errada = recusado', await tenta('Empresa Que Nao E','..'+codigo)===401);
+ ck('empresa certa + senha errada = recusado', await tenta('ZZ Login Empresa','a'.repeat(43))===401);
+ ck('empresa + senha certas entram',           await tenta('ZZ Login Empresa',codigo)===200);
+
+ s=await api('GET','/api/sessao');
+ ck('e a sessão é da empresa certa', s.papel==='cliente', s.papel+':'+s.clientId);
  ck('cliente NÃO enxerga as outras empresas', (await (await fetch('/api/home')).status)===403);
+
+ // nome com caixa e espaçamento diferentes
+ await api('POST','/api/sair');
+ ck('nome em minúsculas e com espaços entra', await tenta('  zz login empresa  ',codigo)===200);
 
  // limpeza
  await api('POST','/api/entrar',{chave:window.CHAVE});

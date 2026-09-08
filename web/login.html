@@ -34,13 +34,30 @@
     </form>
 
     <form id="form-cliente" class="entrar-painel">
-      <label for="codigo">Link de acesso</label>
-      <input type="text" id="codigo" autocomplete="off" spellcheck="false"
+      <label for="empresa">Empresa</label>
+      <input type="text" id="empresa" autocomplete="organization" spellcheck="false"
+             placeholder="Nome da sua empresa">
+
+      <label for="codigo" style="margin-top:14px;">Senha</label>
+      <input type="password" id="codigo" autocomplete="current-password" spellcheck="false"
              placeholder="Cole aqui o link que você recebeu">
+
       <button type="submit" class="entrar-botao">Entrar</button>
+      <button type="button" class="entrar-link" id="btn-esqueci">Esqueci o link de acesso</button>
       <p class="entrar-rodape">
-        Pode colar o link inteiro ou só o código do final dele. Você verá apenas os
-        processos da sua empresa.
+        A senha é o link que a consultoria enviou — pode colar inteiro. Você verá apenas
+        os processos da sua empresa.
+      </p>
+    </form>
+
+    <form id="form-recuperar" class="entrar-painel">
+      <label for="rec-empresa">Empresa</label>
+      <input type="text" id="rec-empresa" autocomplete="organization" placeholder="Nome da sua empresa">
+      <button type="submit" class="entrar-botao">Pedir um link novo</button>
+      <button type="button" class="entrar-link" id="btn-voltar-login">Voltar</button>
+      <p class="entrar-rodape">
+        O pedido chega direto para a consultoria, que envia um link novo. O anterior
+        deixa de valer.
       </p>
     </form>
   </div>
@@ -77,8 +94,20 @@ function mostrarAba(qual) {
     $(`aba-${nome}`).setAttribute('aria-selected', String(ativa));
     $(`form-${nome}`).classList.toggle('ativo', ativa);
   }
+  // A recuperação é um terceiro painel sem aba: só se chega nela pelo link, e
+  // trocar de aba tem que trazer de volta ao formulário normal.
+  $('form-recuperar').classList.remove('ativo');
   try { localStorage.setItem(LEMBRANCA, qual); } catch { /* aba anônima */ }
-  $(qual === 'admin' ? 'chave' : 'codigo').focus();
+  $(qual === 'admin' ? 'chave' : 'empresa').focus();
+}
+
+function mostrarRecuperacao(mostrar) {
+  $('form-cliente').classList.toggle('ativo', !mostrar);
+  $('form-recuperar').classList.toggle('ativo', mostrar);
+  if (mostrar) {
+    $('rec-empresa').value = $('empresa').value;
+    $('rec-empresa').focus();
+  }
 }
 document.querySelectorAll('.entrar-aba').forEach((b) => {
   b.addEventListener('click', () => { erro(''); mostrarAba(b.dataset.aba); });
@@ -91,11 +120,6 @@ if (!['admin', 'cliente'].includes(inicial)) {
   try { inicial = localStorage.getItem(LEMBRANCA); } catch { inicial = null; }
 }
 mostrarAba(['admin', 'cliente'].includes(inicial) ? inicial : 'admin');
-
-if (params.get('erro') === 'link') {
-  erro('Esse link de acesso não é mais válido — ele pode ter sido revogado ou substituído '
-     + 'por um novo. Peça outro à consultoria.');
-}
 
 // Já tem sessão? Não faz sentido pedir credencial de novo.
 fetch('/api/sessao').then((r) => r.json()).then((s) => { if (s.autenticado) location.href = '/'; })
@@ -126,23 +150,76 @@ $('form-admin').addEventListener('submit', async (e) => {
 
 // ── Cliente ───────────────────────────────────────────────────────────────────
 /**
- * Nenhuma rota nova: `GET /e/<código>` já valida, grava a sessão e redireciona.
- * Colar na tela e clicar no link são o mesmo caminho do ponto de vista do servidor.
+ * Quem chegou pelo link já tem a senha: ela veio num cookie de vida curta que o
+ * `/e/<token>` gravou. Buscá-la aqui, e não pela URL, é o que mantém o código
+ * fora da barra de endereços — de onde vazaria em print, histórico e `Referer`.
  */
-$('form-cliente').addEventListener('submit', (e) => {
+fetch('/api/senha-pendente').then((r) => r.json()).then(({ senha }) => {
+  if (!senha) return;
+  $('codigo').value = senha;
+  mostrarAba('cliente');
+  $('empresa').focus();
+}).catch(() => {});
+
+$('form-cliente').addEventListener('submit', async (e) => {
   e.preventDefault();
+  const empresa = $('empresa').value.trim();
   const codigo = extrairCodigo($('codigo').value);
-  // Erro de formato é diferente de código recusado, e dizer qual dos dois é o que
+
+  // Erro de formato é diferente de credencial recusada, e dizer qual dos dois
   // permite a pessoa se corrigir sozinha em vez de ligar para o consultor.
+  if (!empresa) { erro('Informe o nome da sua empresa.'); $('empresa').focus(); return; }
   if (!codigo) {
-    erro('Não reconheci um link de acesso aí. Cole a URL inteira que você recebeu, '
-       + 'ou apenas o código que vem depois de <code>/e/</code>.');
+    erro('Não reconheci um link de acesso no campo de senha. Cole a URL inteira que '
+       + 'você recebeu, ou apenas o código que vem depois de <code>/e/</code>.');
     $('codigo').select();
     return;
   }
+
   const btn = e.target.querySelector('button');
   btn.disabled = true; btn.textContent = 'Entrando…';
-  location.href = `/e/${codigo}`;
+  try {
+    const r = await fetch('/api/entrar-cliente', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ empresa, senha: codigo }),
+    });
+    if (!r.ok) {
+      const corpo = await r.json().catch(() => ({}));
+      // Bloqueio não é erro de digitação: quem não distingue os dois tenta de novo.
+      throw new Error(corpo.error || 'Não foi possível entrar.');
+    }
+    location.href = '/';
+  } catch (err) {
+    erro(err.message);
+    btn.disabled = false; btn.textContent = 'Entrar';
+  }
+});
+
+// ── Recuperação ───────────────────────────────────────────────────────────────
+$('btn-esqueci').addEventListener('click', () => { erro(''); mostrarRecuperacao(true); });
+$('btn-voltar-login').addEventListener('click', () => { erro(''); mostrarRecuperacao(false); });
+
+$('form-recuperar').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const btn = e.target.querySelector('button');
+  btn.disabled = true; btn.textContent = 'Enviando…';
+  try {
+    const r = await fetch('/api/recuperar', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ empresa: $('rec-empresa').value.trim() }),
+    });
+    const { mensagem } = await r.json().catch(() => ({}));
+    // A resposta é a mesma exista a empresa ou não — senão esta tela vira
+    // consulta de quem é cliente da consultoria.
+    $('form-recuperar').innerHTML = `<p class="entrar-rodape" style="margin:0;">
+      <i style="color:#34d399;">✓</i> ${mensagem || 'Pedido registrado.'}
+      Você pode fechar esta página.</p>`;
+  } catch {
+    erro('Não foi possível registrar o pedido agora. Tente de novo em instantes.');
+    btn.disabled = false; btn.textContent = 'Pedir um link novo';
+  }
 });
 </script>
 </body>

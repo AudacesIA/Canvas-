@@ -35,8 +35,16 @@ try{
  const {caminho}=await (await fetch(`/api/clients/${client.id}/acesso`,{method:'POST'})).json();
  ck('link gerado', /^\/e\/[A-Za-z0-9_-]{40,}$/.test(caminho), caminho.slice(0,14)+'…');
 
- // ── vira cliente: abrir o link troca a sessão ────────────────────────────
+ // ── vira cliente: link + nome da empresa ─────────────────────────────────
+ // O link sozinho NAO loga mais — ele e so a senha, e a empresa e o 2o fator.
+ // Sair primeiro: a sessão de admin desta suíte mascararia o resultado — o
+ // teste veria "autenticado" e daria por bom o que nunca foi verificado.
+ await cod('POST','/api/sair');
  await fetch(caminho, { redirect:'follow' });
+ const senha=caminho.split('/e/')[1];
+ ck('link sozinho não cria sessão', !(await j('/api/sessao')).autenticado);
+ ck('empresa + senha entram',
+    await cod('POST','/api/entrar-cliente',{empresa:'ZZ Acesso',senha})===200);
  const s2=await j('/api/sessao');
  ck('sessão virou cliente', s2.papel==='cliente' && s2.clientId===client.id, s2.papel+':'+s2.clientId);
 
@@ -61,7 +69,7 @@ try{
  // link invalido tem que cair numa pagina que EXISTE — antes ia para /entrar (404)
  const r=await fetch('/e/token-que-nao-existe',{redirect:'follow'});
  ck('link inválido cai em página que responde 200', r.status===200, 'HTTP '+r.status);
- ck('e essa página é a de login', /entrar/.test(r.url), r.url.replace(location.origin,''));
+ ck('e essa página é a de login', /\/login/.test(r.url), r.url.replace(location.origin,''));
 
  // limpeza
  await fetch('/api/entrar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({chave:window.CHAVE_ADMIN})});

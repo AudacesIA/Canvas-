@@ -31,6 +31,11 @@ export class Storage {
   // --- clientes ---
 
   /** @returns {Promise<ClientMeta[]>} */
+  /** Estado do administrador (bloqueios, notificações): fora de qualquer cliente. */
+  async readAdmin(nome) { throw new Error('not implemented'); }
+
+  async writeAdmin(nome, dados) { throw new Error('not implemented'); }
+
   async listClients() { throw new Error('not implemented'); }
 
   /** @returns {Promise<ClientMeta|null>} */

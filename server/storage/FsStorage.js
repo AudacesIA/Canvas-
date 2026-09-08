@@ -81,6 +81,27 @@ export class FsStorage extends Storage {
     return path.join(dir, `${safeSegment(changesetId, 'changesetId')}.json`);
   }
 
+  /**
+   * Estado do administrador, fora de qualquer cliente.
+   *
+   * Bloqueios de IP e notificações não pertencem a empresa nenhuma — são do
+   * consultor. Guardá-los dentro de `clients/` obrigaria a escolher um cliente
+   * dono, e apagar essa empresa levaria os avisos junto.
+   */
+  adminFile(nome) {
+    return path.join(this.dataDir, 'admin', `${safeSegment(nome, 'nome')}.json`);
+  }
+
+  async readAdmin(nome) {
+    return readJson(this.adminFile(nome));
+  }
+
+  async writeAdmin(nome, dados) {
+    await fs.mkdir(path.join(this.dataDir, 'admin'), { recursive: true });
+    await writeJsonAtomic(this.adminFile(nome), dados);
+    return dados;
+  }
+
   // --- clientes ---
 
   async listClients() {

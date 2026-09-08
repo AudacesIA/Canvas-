@@ -3504,6 +3504,7 @@ body.modo-leitura .node-palette,
 body.modo-leitura .properties-panel,
 body.modo-leitura #header-tools-dropdown-wrapper,
 body.modo-leitura #btn-chat-toggle,
+body.modo-leitura #btn-notificacoes,
 body.modo-leitura #btn-audit,
 body.modo-leitura .btn-novo-cenario-home,
 body.modo-leitura .canvas-card-menu,
@@ -3641,3 +3642,42 @@ body.modo-leitura #canvas-viewport { left: 0; right: 0; }
   color: var(--text-secondary);
   line-height: 1.6;
 }
+
+/* Ação secundária da tela de entrada: recuperação e voltar. Botão, não link,
+   porque não navega para lugar nenhum — troca o painel. */
+.entrar-link {
+  width: 100%;
+  margin-top: 10px;
+  padding: 8px;
+  border: none;
+  background: none;
+  color: var(--text-secondary);
+  font-size: 12.5px;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.entrar-link:hover { color: #93c5fd; }
+
+/* ── Sineta: o que espera decisão do consultor ────────────────────────────── */
+.notif-item {
+  padding: 12px 14px;
+  margin-bottom: 10px;
+  border: 1px solid var(--glass-border);
+  border-left: 3px solid rgba(96, 165, 250, 0.5);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.notif-cabeca {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  margin-bottom: 5px;
+}
+
+.notif-quando { margin-left: auto; font-size: 11px; color: var(--text-secondary); }
+.notif-detalhe { font-size: 12.5px; color: var(--text-secondary); line-height: 1.5; }
+.notif-acoes { display: flex; gap: 8px; margin-top: 10px; }

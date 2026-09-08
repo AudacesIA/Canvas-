@@ -15,7 +15,7 @@ RAIZ="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CHROME="${CHROME:-/Applications/Google Chrome.app/Contents/MacOS/Google Chrome}"
 TMP="$(mktemp -d)"
 PORTA_BASE="${PORTA_BASE:-8890}"
-SUITES=(overlays.html acesso.html cenarios.html login.html)
+SUITES=(overlays.html acesso.html cenarios.html login.html limite.html)
 FALHAS=0
 
 [ -x "$CHROME" ] || { echo "Chrome não encontrado em: $CHROME"; echo "Defina CHROME=/caminho/para/chrome"; exit 2; }

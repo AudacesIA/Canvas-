@@ -35,16 +35,31 @@ export function createStaticHandler({ webDir, scriptsDir }) {
       return true;
     }
 
+    /**
+     * Caminho sem extensão tenta `.html` antes de desistir.
+     *
+     * `/login` é um endereço que se digita e se manda por mensagem; `/login.html`
+     * é um arquivo. Sem esta tentativa, todo redirect interno precisa lembrar da
+     * extensão — e o dia em que alguém esquece, o usuário leva um 404 cru. Já
+     * aconteceu: `/e/<token>` inválido mandava para `/entrar`, que não existia.
+     */
+    const candidatos = path.extname(filePath) ? [filePath] : [filePath, `${filePath}.html`];
+
     let data;
-    try {
-      data = await fs.readFile(filePath);
-    } catch (err) {
-      if (err.code === 'ENOENT' || err.code === 'EISDIR') return false;
-      throw err;
+    let servido = null;
+    for (const candidato of candidatos) {
+      try {
+        data = await fs.readFile(candidato);
+        servido = candidato;
+        break;
+      } catch (err) {
+        if (err.code !== 'ENOENT' && err.code !== 'EISDIR') throw err;
+      }
     }
+    if (!servido) return false;
 
     res.writeHead(200, {
-      'Content-Type': MIME[path.extname(filePath).toLowerCase()] ?? 'application/octet-stream',
+      'Content-Type': MIME[path.extname(servido).toLowerCase()] ?? 'text/html; charset=utf-8',
       'Cache-Control': 'no-store',
     });
     res.end(data);

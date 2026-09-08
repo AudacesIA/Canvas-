@@ -1,0 +1,73 @@
+<!doctype html>
+<!--
+  Limite de tentativas, bloqueio e sineta.
+
+  O caso que mais importa é o do ADMIN: a regra "libera só com aprovação do
+  admin" trancaria o próprio admin do lado de fora, sem ninguém para aprovar.
+  Por isso a chave dele não bloqueia — e é aqui que isso fica provado, porque é
+  o tipo de decisão que alguém "conserta" depois achando que era esquecimento.
+-->
+<title>limite</title><body><pre id="o">…</pre>
+<script>
+window.CHAVE=new URLSearchParams(location.search).get('k')||'';
+const R=[],erros=[];
+const ck=(n,p,d)=>R.push((p?'OK   ':'FALHA')+' '+n+(d?'  ('+d+')':''));
+window.addEventListener('error',e=>erros.push(e.message));
+const api=async(m,p,b)=>{const r=await fetch(p,{method:m,headers:b?{'Content-Type':'application/json'}:{},body:b?JSON.stringify(b):undefined});const j=await r.json().catch(()=>null);if(!r.ok)throw Object.assign(new Error((j&&j.error)||r.status),{status:r.status,corpo:j});return j;};
+const cod=async(m,p,b)=>(await fetch(p,{method:m,headers:b?{'Content-Type':'application/json'}:{},body:b?JSON.stringify(b):undefined})).status;
+const errar=()=>cod('POST','/api/entrar-cliente',{empresa:'nao-existe',senha:'z'.repeat(43)});
+
+(async()=>{
+try{
+ await api('POST','/api/entrar',{chave:window.CHAVE});
+ const {client}=await api('POST','/api/clients',{name:'ZZ Limite'});
+ const {caminho}=await api('POST',`/api/clients/${client.id}/acesso`);
+ const senha=caminho.split('/e/')[1];
+ await api('POST','/api/sair');
+
+ // ── 5 tentativas ────────────────────────────────────────────────────────
+ const codigos=[];
+ for (let i=0;i<6;i++) codigos.push(await errar());
+ ck('as 5 primeiras são recusadas (401)', codigos.slice(0,5).every(c=>c===401), codigos.slice(0,5).join(','));
+ ck('a 6ª é BLOQUEIO (429), não 401',     codigos[5]===429, String(codigos[5]));
+
+ // bloqueado, nem a credencial certa entra
+ ck('bloqueado: nem a senha certa passa',
+    await cod('POST','/api/entrar-cliente',{empresa:'ZZ Limite',senha})===429);
+
+ // ── a sineta acendeu ────────────────────────────────────────────────────
+ await api('POST','/api/entrar',{chave:window.CHAVE});
+ let {notificacoes}=await api('GET','/api/notificacoes');
+ const bloqueio=notificacoes.find(n=>n.tipo==='bloqueio');
+ ck('sineta registrou o bloqueio', !!bloqueio, bloqueio&&bloqueio.detalhe.slice(0,40));
+
+ // ── admin NUNCA bloqueia ────────────────────────────────────────────────
+ await api('POST','/api/sair');
+ for (let i=0;i<8;i++) await cod('POST','/api/entrar',{chave:'chave-errada'});
+ ck('após 8 erros o admin ainda entra', await cod('POST','/api/entrar',{chave:window.CHAVE})===200);
+ ({notificacoes}=await api('GET','/api/notificacoes'));
+ ck('mas a sineta avisa das tentativas', notificacoes.some(n=>n.tipo==='tentativas-admin'));
+
+ // ── liberar pela sineta ─────────────────────────────────────────────────
+ await api('POST',`/api/notificacoes/${bloqueio.id}/liberar-ip`);
+ await api('POST','/api/sair');
+ ck('depois de liberado, a senha certa entra',
+    await cod('POST','/api/entrar-cliente',{empresa:'ZZ Limite',senha})===200);
+
+ // ── recuperação não revela quem é cliente ───────────────────────────────
+ await api('POST','/api/sair');
+ const r1=await (await fetch('/api/recuperar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({empresa:'ZZ Limite'})})).text();
+ const r2=await (await fetch('/api/recuperar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({empresa:'Empresa Que Nunca Existiu'})})).text();
+ ck('resposta idêntica para empresa que existe e que não existe', r1===r2, r1.slice(0,42));
+
+ await api('POST','/api/entrar',{chave:window.CHAVE});
+ ({notificacoes}=await api('GET','/api/notificacoes'));
+ ck('pedido de recuperação chegou na sineta', notificacoes.some(n=>n.tipo==='recuperacao'));
+
+ await api('DELETE',`/api/clients/${client.id}`);
+}catch(e){ck('execução',false,e.message);}
+ const text=R.join('\n')+(erros.length?'\n\nERROS JS:\n'+erros.join('\n'):'');
+ document.getElementById('o').textContent=text;
+ await fetch('/api/_test-report',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text})});
+})();
+</script>

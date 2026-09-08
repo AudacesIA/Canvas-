@@ -12,6 +12,8 @@ import { registerChangesetRoutes } from './http/routes.changesets.js';
 import { registerImportRoutes } from './http/routes.import.js';
 import { registerAcessoRoutes } from './http/routes.acesso.js';
 import { lerSessao, podeAcessar, exigirSegredo } from './http/sessao.js';
+import { LimiteDeTentativas } from './http/limite.js';
+import { Notificacoes } from './core/notificacoes.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const PORT = Number(process.env.AUDASYS_PORT || 8787);
@@ -44,6 +46,8 @@ try {
 const storage = new FsStorage(DATA_DIR);
 const canvasService = new CanvasService(storage);
 const changesetService = new ChangesetService(storage, canvasService);
+const limite = new LimiteDeTentativas(storage);
+const notificacoes = new Notificacoes(storage);
 
 const router = createRouter();
 const serveStatic = createStaticHandler({
@@ -77,7 +81,7 @@ if (process.env.AUDASYS_TEST === '1') {
   });
 }
 
-registerAcessoRoutes(router, { canvasService });
+registerAcessoRoutes(router, { canvasService, limite, notificacoes });
 registerCanvasRoutes(router, { canvasService, changesetService });
 registerChangesetRoutes(router, { canvasService, changesetService });
 registerImportRoutes(router, { canvasService });
@@ -95,7 +99,13 @@ const SERVICE_TOKEN = process.env.AUDASYS_SERVICE_TOKEN || '';
  * (e responder "ninguém"), e `/api/entrar` para o consultor mandar a chave de
  * admin. Tudo o mais nasce fechado.
  */
-const ROTAS_ABERTAS = new Set(['/api/sessao', '/api/entrar', '/api/sair']);
+const ROTAS_ABERTAS = new Set([
+  '/api/sessao', '/api/entrar', '/api/sair',
+  // O login do cliente e o pedido de recuperação acontecem ANTES de existir
+  // sessão — se o portão os exigisse, ninguém entraria nunca. Quem os protege é
+  // o limite de tentativas por IP, não a sessão.
+  '/api/entrar-cliente', '/api/recuperar', '/api/senha-pendente',
+]);
 if (process.env.AUDASYS_TEST === '1') ROTAS_ABERTAS.add('/api/_test-report');
 
 const server = http.createServer(async (req, res) => {
