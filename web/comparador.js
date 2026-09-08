@@ -1,7 +1,7 @@
 /**
  * Modal de Comparação Executiva Baseado em Markdown & Estrutura (As-Is vs To-Be).
  *
- * Apresentação executiva para a Etapa 3 da consultoria Audaces.
+ * Apresentação executiva para a Etapa 3 da consultoria.
  */
 (function () {
   'use strict';

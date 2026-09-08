@@ -1,4 +1,4 @@
-// Audaces Canvas - Application Engine
+// Audasys Business Canvas — Application Engine
 
 // 0. UNIVERSAL OVERLAY, MODAL & DRAWER STATE MACHINE
 window.OverlayManager = {
@@ -1897,7 +1897,7 @@ function runAiAudit() {
   
   // Build Prompt Export Box
   const promptData = {
-    title: "Audaces Canvas Process Dump",
+    title: "Audasys Business Canvas — Process Dump",
     timestamp: new Date().toISOString(),
     health_score: hs ? { total: hs.total, classificacao: hs.tier, fatores: hs.factors.map(f => ({ fator: f.label, pontos: `${f.score}/${f.max}` })) } : null,
     nodes: nodes.map(n => ({
@@ -1918,7 +1918,7 @@ function runAiAudit() {
     }))
   };
   
-  const formattedPrompt = `Haja como um consultor de operações de alta performance e especialista em arquitetura de processos de negócios (BPM). Abaixo, forneço a base de dados do nosso mapeamento de processos feito no Audaces Canvas em formato JSON.
+  const formattedPrompt = `Haja como um consultor de operações de alta performance e especialista em arquitetura de processos de negócios (BPM). Abaixo, forneço a base de dados do nosso mapeamento de processos feito no Audasys Business Canvas em formato JSON.
 
 Analise nossa topologia de fluxo e fichas de etapas e nos dê:
 1. Um diagnóstico de problemas estruturais (ex: gargalos acumulados, falta de donos em etapas críticas, ou redundâncias).

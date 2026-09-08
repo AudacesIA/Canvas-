@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 86.6" role="img" aria-label="Audasys">
+  <!--
+    Marca Audasys: três triângulos equiláteros.
+
+    As proporções vieram da medição do PNG oficial, não de estimativa: a razão
+    altura/largura do símbolo dá 0.8660, que é exatamente √3/2 — equilátero.
+    O recorte e o triângulo interno seguem a mesma construção, o que mantém as
+    arestas paralelas em qualquer tamanho.
+
+    `evenodd` no primeiro path é o que abre o vão: o segundo subpath fura o
+    primeiro em vez de ser pintado por cima. Pintar por cima exigiria saber a cor
+    do fundo, e a marca precisa funcionar sobre qualquer um.
+  -->
+  <path fill="#F1F5F9" fill-rule="evenodd"
+        d="M50 0 L100 86.6 L0 86.6 Z M50 45.1 L73.95 86.6 L26.05 86.6 Z"/>
+  <path fill="#2663EB" d="M50 54.4 L68.6 86.6 L31.4 86.6 Z"/>
+</svg>
