@@ -8,6 +8,7 @@
   o tipo de decisão que alguém "conserta" depois achando que era esquecimento.
 -->
 <title>limite</title><body><pre id="o">…</pre>
+<iframe id="f" style="position:fixed;left:-4000px;width:1200px;height:800px"></iframe>
 <script>
 window.CHAVE=new URLSearchParams(location.search).get('k')||'';
 const R=[],erros=[];
@@ -64,6 +65,39 @@ try{
  ({notificacoes}=await api('GET','/api/notificacoes'));
  ck('pedido de recuperação chegou na sineta', notificacoes.some(n=>n.tipo==='recuperacao'));
 
+ // ── a sineta mora na HOME do admin ──────────────────────────────────────
+ const f=document.getElementById('f'), D=()=>f.contentDocument, W=()=>f.contentWindow;
+ const until=async(fn,ms=8000)=>{const t=Date.now();while(Date.now()-t<ms){try{if(await fn())return true;}catch{}await new Promise(r=>setTimeout(r,120));}return false;};
+ f.src='/';
+ await until(()=>D()&&D().getElementById('home-screen'));
+ await until(()=>D().getElementById('home-screen').style.display!=='none');
+
+ const sino=D().getElementById('btn-notificacoes');
+ ck('sineta existe na Home', !!sino);
+ ck('sineta está na barra da Home, não no header do fluxo',
+    !!sino?.closest('.home-toolbar-right') && !sino?.closest('#header-actions'));
+ ck('sineta visível na Home', !!sino && W().getComputedStyle(sino).display!=='none');
+ ck('contador aceso com pendência',
+    await until(()=>D().getElementById('notif-count-badge')?.style.display!=='none',4000),
+    D().getElementById('notif-count-badge')?.textContent);
+ ck('sineta marcada como pendente', sino?.classList.contains('tem-pendencia'));
+
+ sino.click();
+ ck('painel abre ao clicar', await until(()=>D().getElementById('notificacoes-overlay'),3000));
+ ck('painel lista as pendências', (D().querySelectorAll('.notif-item')||[]).length>0,
+    (D().querySelectorAll('.notif-item')||[]).length+' item(ns)');
+
+ // o CLIENTE nao pode ver a sineta
+ await api('POST','/api/sair');
+ await api('POST','/api/entrar-cliente',{empresa:'ZZ Limite',senha});
+ f.src='/?v=cliente';
+ await until(()=>D()&&D().body&&D().body.classList.contains('modo-leitura'),8000);
+ const sinoCli=D().getElementById('btn-notificacoes');
+ ck('cliente NÃO vê a sineta',
+    !sinoCli || W().getComputedStyle(sinoCli).display==='none');
+
+ await api('POST','/api/sair');
+ await api('POST','/api/entrar',{chave:window.CHAVE});
  await api('DELETE',`/api/clients/${client.id}`);
 }catch(e){ck('execução',false,e.message);}
  const text=R.join('\n')+(erros.length?'\n\nERROS JS:\n'+erros.join('\n'):'');

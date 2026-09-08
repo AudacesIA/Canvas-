@@ -3259,8 +3259,12 @@ async function atualizarNotificacoes() {
   } catch { return; }
   const badge = document.getElementById('notif-count-badge');
   if (!badge) return;
-  badge.textContent = String(notificacoesPendentes.length);
-  badge.style.display = notificacoesPendentes.length ? '' : 'none';
+  const quantas = notificacoesPendentes.length;
+  badge.textContent = String(quantas);
+  badge.style.display = quantas ? '' : 'none';
+  // Classe, e não um seletor que lê o atributo `style`: a cor de alerta não pode
+  // depender de o JS escrever `display:none` com essa grafia exata.
+  document.getElementById('btn-notificacoes')?.classList.toggle('tem-pendencia', quantas > 0);
   const painel = document.getElementById('notificacoes-overlay');
   if (painel) desenharNotificacoes(painel);
 }

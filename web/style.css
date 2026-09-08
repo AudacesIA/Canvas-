@@ -2188,6 +2188,55 @@ body {
   color: var(--text-muted);
 }
 
+/* A barra da Home ganhou a sineta ao lado do botão principal. */
+.home-toolbar-right { display: flex; align-items: center; gap: 10px; }
+
+/**
+ * Botão só de ícone, na altura do primário ao lado.
+ * `position: relative` porque o contador flutua no canto dele.
+ */
+.home-icon-btn {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--glass-border);
+  border-radius: 8px;
+  color: var(--text-secondary);
+  font-size: 15px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.home-icon-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: var(--glass-border-hover);
+  color: #e2e8f0;
+}
+
+/* Com pendência a sineta muda de cor: ela é para ser notada de relance, e um
+   ícone apagado com um número minúsculo ao lado passa despercebido. */
+.home-icon-btn.tem-pendencia { color: #fbbf24; border-color: rgba(251, 191, 36, 0.35); }
+
+.notif-badge {
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  min-width: 17px;
+  height: 17px;
+  padding: 0 4px;
+  border-radius: 9px;
+  background: #ef4444;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 17px;
+  text-align: center;
+}
+
 .home-primary-btn {
   display: flex;
   align-items: center;
@@ -3504,7 +3553,7 @@ body.modo-leitura .node-palette,
 body.modo-leitura .properties-panel,
 body.modo-leitura #header-tools-dropdown-wrapper,
 body.modo-leitura #btn-chat-toggle,
-body.modo-leitura #btn-notificacoes,
+body.modo-leitura #btn-notificacoes,   /* sineta é do consultor, não do cliente */
 body.modo-leitura #btn-audit,
 body.modo-leitura .btn-novo-cenario-home,
 body.modo-leitura .canvas-card-menu,

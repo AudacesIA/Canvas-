@@ -14,7 +14,11 @@ set -uo pipefail
 RAIZ="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CHROME="${CHROME:-/Applications/Google Chrome.app/Contents/MacOS/Google Chrome}"
 TMP="$(mktemp -d)"
-PORTA_BASE="${PORTA_BASE:-8890}"
+# Porta sorteada a cada execução: duas rodadas coladas disputavam a mesma faixa,
+# o sistema ainda segurava a porta da anterior, o servidor saía com EADDRINUSE e a
+# suíte falhava sem nenhum check falhar — o pior tipo de falha, porque parece bug
+# do código. Sorteando, a colisão deixa de existir.
+PORTA_BASE="${PORTA_BASE:-$(( 8900 + RANDOM % 900 ))}"
 SUITES=(overlays.html acesso.html cenarios.html login.html limite.html)
 FALHAS=0
 
@@ -62,6 +66,10 @@ roda_suite() {
 
   echo "── $pagina ─────────────────────────────────────────"
   if [ ! -f "$relatorio" ]; then
+    if grep -q 'já está ocupada' "$TMP/servidor-$porta.log" 2>/dev/null; then
+      echo "  SEM RELATÓRIO — a porta $porta estava ocupada; rode de novo."
+      return 1
+    fi
     echo "  SEM RELATÓRIO — a página não concluiu. Log do servidor:"
     tail -5 "$TMP/servidor-$porta.log" | sed 's/^/    /'
     return 1
