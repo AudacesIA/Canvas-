@@ -67,7 +67,11 @@ if (process.env.AUDASYS_TEST === '1') {
     const { readJsonBody } = await import('./http/router.js');
     const body = await readJsonBody(req);
     const { writeFileSync } = await import('node:fs');
-    writeFileSync('/tmp/audasys-e2e-report.json', JSON.stringify(body, null, 2));
+    // Caminho configurável para o runner poder dar um arquivo por suíte — com
+    // um caminho fixo, a segunda suíte sobrescreve o relatório da primeira e o
+    // script lê o resultado errado sem perceber.
+    writeFileSync(process.env.AUDASYS_RELATORIO || '/tmp/audasys-e2e-report.json',
+      JSON.stringify(body, null, 2));
     console.log(`\n=== RELATÓRIO E2E ===\n${body.text}\n`);
     sendJson(res, 200, { ok: true });
   });

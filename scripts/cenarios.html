@@ -1,0 +1,84 @@
+<!doctype html>
+<!--
+  Cenário sem versionamento, com V0.
+
+  Cobre a regra que o consultor definiu: o cenário é uma alteração do processo
+  original, não versiona, e guarda um único retrato do nascimento contra o qual
+  se mede o que mudou.
+
+  O caso que mais importa aqui é o do SEGUNDO cenário: a herança do histórico do
+  pai só aparecia a partir dele, porque no primeiro a auto-promoção do baseline
+  rodava depois da leitura em memória. Bug que muda conforme a ordem passa por
+  um teste que só roda uma vez.
+-->
+<title>cenarios</title><body><pre id="o">…</pre>
+<script>
+window.CHAVE=new URLSearchParams(location.search).get('k')||'';
+const R=[],erros=[];
+const ck=(n,p,d)=>R.push((p?'OK   ':'FALHA')+' '+n+(d?'  ('+d+')':''));
+window.addEventListener('error',e=>erros.push(e.message));
+const api=async(m,p,b)=>{const r=await fetch(p,{method:m,headers:b?{'Content-Type':'application/json'}:{},body:b?JSON.stringify(b):undefined});const j=await r.json().catch(()=>null);if(!r.ok)throw Object.assign(new Error((j&&j.error)||r.status),{status:r.status});return j;};
+const cod=async(m,p,b)=>(await fetch(p,{method:m,headers:b?{'Content-Type':'application/json'}:{},body:b?JSON.stringify(b):undefined})).status;
+
+(async()=>{
+try{
+ await api('POST','/api/entrar',{chave:window.CHAVE});
+ const {client}=await api('POST','/api/clients',{name:'ZZ Cenarios'});
+ const {canvas}=await api('POST',`/api/clients/${client.id}/canvases`,{name:'Processo'});
+ const base=`/api/clients/${client.id}/canvases`;
+ await api('PUT',`${base}/${canvas.id}`,{nodes:[
+   {id:'n1',name:'Receber',type:'trigger',x:80,y:200},
+   {id:'n2',name:'Separar',type:'action',x:300,y:200},
+   {id:'n3',name:'Entregar',type:'output',x:520,y:200}],
+  connections:[{id:'e1',from:'n1',to:'n2'},{id:'e2',from:'n2',to:'n3'}],
+  oportunidades:[],breakpoints:[],notes:[]});
+
+ // dois cenários seguidos do MESMO processo — o 2o é onde o defeito aparecia
+ const c1=(await api('POST',`${base}/${canvas.id}/cenarios`,{premissa:'primeiro'})).canvas;
+ const c2=(await api('POST',`${base}/${canvas.id}/cenarios`,{premissa:'segundo'})).canvas;
+
+ for (const [rot,c] of [['1o',c1],['2o',c2]]) {
+   ck(`${rot} cenário: clone fiel`, c.nodes.length===3 && c.connections.length===2, `${c.nodes.length} nós`);
+   ck(`${rot} cenário: NÃO herda versoesMapa`, (c.versoesMapa||[]).length===0, `${(c.versoesMapa||[]).length}`);
+   ck(`${rot} cenário: NÃO herda mapaProcessoAtual`, !c.mapaProcessoAtual);
+   ck(`${rot} cenário: V0 gravado`, !!c.derivadoDe.v0 && c.derivadoDe.v0.nodes.length===3);
+ }
+ ck('campos do gerador falso não voltaram',
+    !('comparativoTexto' in c1.derivadoDe) && !('nosRemovidos' in c1.derivadoDe),
+    Object.keys(c1.derivadoDe).join(','));
+
+ // sem mudança nenhuma, o diff contra o V0 é zero
+ let cmp=await api('GET',`${base}/${c1.id}/comparar`);
+ ck('desdeV0 existe na comparação', !!cmp.desdeV0);
+ ck('cenário recém-nascido: zero diferença', cmp.desdeV0.estrutura.passos.delta===0);
+
+ // consultor apaga um passo à mão
+ const doc=(await api('GET',`${base}/${c1.id}`)).canvas;
+ doc.nodes=doc.nodes.filter(n=>n.id!=='n2');
+ doc.connections=[];
+ await api('PUT',`${base}/${c1.id}`,doc);
+ cmp=await api('GET',`${base}/${c1.id}/comparar`);
+ ck('desdeV0 reage à edição', cmp.desdeV0.estrutura.passos.delta===-1, `delta ${cmp.desdeV0.estrutura.passos.delta}`);
+ ck('desdeV0 nomeia o passo removido', (cmp.desdeV0.passos.removidos||[]).includes('Separar'),
+    (cmp.desdeV0.passos.removidos||[]).join(','));
+
+ // V0 é imutável: editar o cenário não mexe nele
+ const depois=(await api('GET',`${base}/${c1.id}`)).canvas;
+ ck('V0 continua com 3 nós depois da edição', depois.derivadoDe.v0.nodes.length===3,
+    `${depois.derivadoDe.v0.nodes.length}`);
+
+ // versionamento: proibido no cenário, permitido no processo real
+ ck('salvar-mapa no cenário é recusado', await cod('POST',`${base}/${c1.id}/salvar-mapa`,{})===422);
+ ck('docs/mapa no cenário funciona',      await cod('POST',`${base}/${c1.id}/docs/mapa`)===200);
+ ck('salvar-mapa no processo real funciona', await cod('POST',`${base}/${canvas.id}/salvar-mapa`,{})===201);
+
+ // cenário de cenário continua proibido
+ ck('cenário de cenário é recusado', await cod('POST',`${base}/${c1.id}/cenarios`,{premissa:'x'})===409);
+
+ await api('DELETE',`/api/clients/${client.id}`);
+}catch(e){ck('execução',false,e.message);}
+ const text=R.join('\n')+(erros.length?'\n\nERROS JS:\n'+erros.join('\n'):'');
+ document.getElementById('o').textContent=text;
+ await fetch('/api/_test-report',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text})});
+})();
+</script>

@@ -3398,15 +3398,6 @@ input.ev-meio, textarea.ev-meio, select.ev-meio { color: #c2c9d6; }
    pode induzir: a consultoria passa a afirmar ao cliente uma operação que ele
    não tem. O selo e a borda tracejada custam nada e tornam a troca impossível. */
 .canvas-card-cenario { border-style: dashed; border-color: rgba(165, 180, 252, 0.45); }
-.canvas-card-selo {
-  display: inline-flex; align-items: center; gap: 6px;
-  font-size: 9.5px; text-transform: uppercase; letter-spacing: .07em;
-  color: #a5b4fc; margin-bottom: 6px;
-}
-.canvas-card-postura {
-  padding: 1px 6px; border-radius: 999px;
-  background: rgba(165, 180, 252, 0.14); border: 1px solid rgba(165, 180, 252, 0.3);
-}
 .canvas-card-premissa {
   font-size: 10.5px; color: #94a3b8; line-height: 1.45; margin-top: 4px;
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;

@@ -2271,6 +2271,21 @@ function applyCanvasState(data, opts = {}) {
   window.currentCanvasDerivadoDe = data.derivadoDe || null;
   updateCenarioHeaderUI(data);
 
+  // Cenário não tem histórico de mapas — o botão não teria o que listar. E o de
+  // salvar muda de sentido: ali ele gera o documento, não uma versão.
+  const ehCenario = !!window.currentCanvasDerivadoDe;
+  const btnHist = document.getElementById('btn-historico-mapas');
+  if (btnHist) btnHist.style.display = ehCenario ? 'none' : '';
+  const btnMapa = document.getElementById('btn-salvar-mapa');
+  if (btnMapa) {
+    btnMapa.innerHTML = ehCenario
+      ? '<i class="fa-solid fa-file-arrow-down" style="color:#60a5fa;"></i> Gerar documento do cenário (.md)'
+      : '<i class="fa-solid fa-file-signature" style="color:#60a5fa;"></i> Salvar Mapa de Processos &amp; Gargalos';
+    btnMapa.title = ehCenario
+      ? 'Gera o .md deste cenário para levar à reunião. Não cria versão: a linha de base é o processo real.'
+      : 'Sintetizar e versionar como Mapa de Processos & Gargalos oficial (.md)';
+  }
+
   updateViewport();
   updateConnections();
 
@@ -3832,11 +3847,26 @@ document.getElementById('btn-back-home')?.addEventListener('click', () => {
 });
 
 // Salvar e Versionar como Mapa de Processos (.md)
+/**
+ * Dentro de um cenário este botão gera o documento, não uma versão.
+ *
+ * Mapa oficial versionado é do processo real — é ele que serve de linha de base.
+ * O cenário precisa do .md para ir à reunião, e só: `docs/mapa` escreve o mesmo
+ * documento sem criar v1, v2, v3. O servidor recusa `salvar-mapa` num cenário de
+ * qualquer forma; esta checagem existe para não oferecer o clique que vai falhar.
+ */
 document.getElementById('btn-salvar-mapa')?.addEventListener('click', async () => {
   if (!activeClientId || !activeCanvasId) return;
+  const ehCenario = !!window.currentCanvasDerivadoDe;
   try {
     saveToLocalStorage();
     await Audasys.persistence.flush();
+
+    if (ehCenario) {
+      await Audasys.api.gerarMapaDoc(activeClientId, activeCanvasId);
+      window.AudasysAgent?.toast?.('Documento do cenário gerado (.md). Cenário não versiona — a linha de base é o processo real.');
+      return;
+    }
 
     const res = await Audasys.api.salvarMapaProcesso(activeClientId, activeCanvasId, {
       autor: 'Consultor',
@@ -3846,7 +3876,7 @@ document.getElementById('btn-salvar-mapa')?.addEventListener('click', async () =
     const v = res.versao;
     abrirModalMapaProcesso(v, `Mapa de Processos salvo com sucesso como Versão ${v.versao}!`);
   } catch (err) {
-    reportError('salvar o mapa de processos', err);
+    reportError(ehCenario ? 'gerar o documento do cenário' : 'salvar o mapa de processos', err);
   }
 });
 

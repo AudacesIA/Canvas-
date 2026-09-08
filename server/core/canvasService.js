@@ -251,9 +251,24 @@ export class CanvasService {
        *
        * Leva as oportunidades, mas não os ponteiros de cenário delas: um
        * `cenarioId` copiado apontaria, de dentro do cenário, para um irmão.
+       *
+       * E NÃO leva o histórico de mapas do pai. Cenário não versiona: quem
+       * determina um cenário é o consultor, e mil versões de um "e se" não
+       * ajudam ninguém a decidir. `versoesMapa` e `mapaProcessoAtual` são do
+       * processo real, e um cenário que os herda passa a exibir versões que
+       * pertencem a outro canvas.
+       *
+       * A exclusão é EXPLÍCITA, e não podia ser outra coisa. Sem ela o defeito
+       * só aparecia do segundo cenário em diante: no primeiro, a auto-promoção
+       * do baseline roda depois de `base` já ter sido lido, e a variável em
+       * memória ainda estava vazia. Comportamento que muda conforme a ordem dos
+       * eventos é pior que errado consistente — você testa uma vez, funciona, e
+       * o problema aparece na frente do cliente.
        */
       seed: strip({
         ...base,
+        versoesMapa: [],
+        mapaProcessoAtual: null,
         oportunidades: base.oportunidades.map((o) => ({ ...o, cenarioId: null })),
       }),
       derivadoDe: {
@@ -261,6 +276,23 @@ export class CanvasService {
         oportunidadeId,
         premissa: String(premissa).trim(),
         postura,
+        /**
+         * V0: o retrato do nascimento. Único, imutável, tirado ANTES da IA.
+         *
+         * É contra ele que se mede o que este cenário mudou — não contra o
+         * processo real, que continua evoluindo depois do fork e faria a conta
+         * mudar sozinha com o tempo.
+         *
+         * Substitui o versionamento que o cenário não tem: em vez de guardar
+         * cada passo, guarda a origem. A IA propõe sobre o V0, o consultor
+         * ajusta sobre o que ficou, e a pergunta "o que mudou aqui" tem uma
+         * resposta estável em qualquer momento.
+         */
+        v0: {
+          criadoEm: new Date().toISOString(),
+          nodes: base.nodes.map((n) => ({ ...n })),
+          connections: base.connections.map((c) => ({ ...c })),
+        },
       },
     });
 
@@ -318,6 +350,21 @@ export class CanvasService {
   /** Salva e versiona o Canvas como um "Mapa de Processos" em Markdown. */
   async salvarMapaProcesso(clientId, canvasId, { autor = 'Consultor', nota = '' } = {}) {
     const canvas = await this.getCanvas(clientId, canvasId);
+    /**
+     * Mapa oficial é do processo real. Cenário não versiona.
+     *
+     * A guarda vive aqui, no serviço, e não no botão: o MCP chama a rota direto,
+     * e regra que só existe na tela é regra que o agente atravessa sem saber.
+     * Para levar o cenário à reunião existe `gerarMapa`, que produz o mesmo .md
+     * sem criar versão nenhuma.
+     */
+    if (canvas.derivadoDe) {
+      throw httpError(422,
+        `"${canvas.name}" é um cenário, e cenário não tem mapa oficial — quem tem é o `
+        + 'processo real, que é a linha de base contra a qual ele é comparado. '
+        + 'Para gerar o .md deste cenário use POST .../docs/mapa, que escreve o documento '
+        + 'sem versionar.');
+    }
     const client = await this.storage.readClient(clientId).catch(() => null);
     const markdown = canvasParaMarkdown(canvas, { clienteNome: client?.name || clientId });
     
@@ -356,7 +403,10 @@ export class CanvasService {
   }
 
   /**
-   * O que existe de cenário neste processo, para o mostrador.
+   * Os cenários e as oportunidades deste processo, lado a lado na resposta.
+   *
+   * Lado a lado por conveniência de tela, NÃO por vínculo: desde que cenário e
+   * oportunidade se separaram, uma não diz nada sobre a outra.
    *
    * Era um PAREAMENTO: casava cada oportunidade com o seu cenário e devolvia as
    * contagens que sustentavam a regra "1 cenário : 1 oportunidade". A regra caiu,
@@ -371,7 +421,7 @@ export class CanvasService {
    * A chave `cenarios` fica porque quatro telas desestruturam `{ cenarios }`
    * daqui: a lista do topo, o chat, o comparador e o Hub.
    */
-  async pareamentoDeCenarios(clientId, canvasId) {
+  async cenariosEOportunidades(clientId, canvasId) {
     const base = await this.getCanvas(clientId, canvasId);
     if (base.derivadoDe) {
       throw httpError(422,

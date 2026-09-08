@@ -115,6 +115,9 @@
       request('GET', `/api/clients/${clientId}/canvases/${canvasId}/markdown`),
     renameCanvas: (clientId, canvasId, name) =>
       request('PATCH', `/api/clients/${clientId}/canvases/${canvasId}`, { body: { name } }),
+    /** Gera o .md SEM versionar. É o caminho do cenário, que não tem histórico. */
+    gerarMapaDoc: (clientId, canvasId) =>
+      request('POST', `/api/clients/${clientId}/canvases/${canvasId}/docs/mapa`),
     salvarMapaProcesso: (clientId, canvasId, { autor = 'Consultor', nota = '' } = {}) =>
       request('POST', `/api/clients/${clientId}/canvases/${canvasId}/salvar-mapa`, { body: { autor, nota } }),
     listarVersoesMapa: (clientId, canvasId) =>

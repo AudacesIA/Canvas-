@@ -434,28 +434,37 @@ export function hydrateDerivadoDe(raw) {
   return {
     canvasId: String(raw.canvasId),
     /**
-     * QUAL oportunidade este cenário testa.
+     * De onde a ideia saiu, quando saiu de uma oportunidade mapeada.
      *
-     * O vínculo com o canvas responde "de onde isto saiu"; este responde "o que
-     * isto está pré-validando", e é o que dá sentido à sequência da consultoria:
-     * gargalo → oportunidade de receita → cenário que a testa → comparação.
+     * PROCEDÊNCIA, não requisito. Já valeu a regra "todo cenário testa UMA
+     * oportunidade, e cada oportunidade tem no máximo um cenário"; ela caiu,
+     * porque a pergunta que origina um cenário quase nunca cabe numa
+     * oportunidade ancorada em aresta — "e se usássemos um aplicativo para fazer
+     * a venda" questiona o processo inteiro.
      *
-     * Sem ele o cenário fica solto — e a pergunta que o consultor leva para a
-     * reunião ("quantas das nossas ideias já foram desenhadas?") não tem
-     * resposta, porque cenário e oportunidade viviam em coleções que ninguém
-     * conseguia cruzar.
-     *
-     * `null` é aceito na leitura porque cenários criados antes deste campo
-     * existem em disco. A EXIGÊNCIA mora em `criarCenario`, não aqui: hidratar
-     * é reconstruir o que está gravado, não recusá-lo.
+     * `null` é o caso comum, não a exceção.
      */
     oportunidadeId: raw.oportunidadeId ? String(raw.oportunidadeId) : null,
     premissa: String(raw.premissa ?? ''),
     postura: oneOf(raw.postura, POSTURAS, 'realista'),
-    comparativoTexto: String(raw.comparativoTexto ?? ''),
-    nosRemovidos: Array.isArray(raw.nosRemovidos) ? raw.nosRemovidos : [],
-    nosSubstituidos: Array.isArray(raw.nosSubstituidos) ? raw.nosSubstituidos : [],
-    nosAdicionados: Array.isArray(raw.nosAdicionados) ? raw.nosAdicionados : [],
+    /**
+     * V0 — o cenário no instante em que nasceu, antes de qualquer proposta da IA.
+     *
+     * Cenário não versiona: quem o determina é o consultor, e guardar cada passo
+     * de um "e se" não ajuda a decidir nada. O que ajuda é uma origem fixa. É
+     * contra o V0 que se mede o que este cenário mudou — e não contra o processo
+     * real, que segue evoluindo depois do fork e faria a conta mudar sozinha.
+     *
+     * Imutável por contrato: nada no sistema reescreve. Cenários criados antes
+     * deste campo vêm com `null`, e aí a comparação cai para o processo real.
+     */
+    v0: raw.v0 && Array.isArray(raw.v0.nodes)
+      ? {
+          criadoEm: raw.v0.criadoEm ?? raw.criadoEm ?? null,
+          nodes: raw.v0.nodes,
+          connections: Array.isArray(raw.v0.connections) ? raw.v0.connections : [],
+        }
+      : null,
     criadoEm: raw.criadoEm ?? new Date().toISOString(),
   };
 }

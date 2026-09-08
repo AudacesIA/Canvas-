@@ -597,7 +597,33 @@
       console.warn('[oportunidades] pareamento indisponível:', err.message);
     }
 
-    const linhas = pareamento ? pareamento.oportunidades : oportunidades;
+    /**
+     * Conferir a FORMA antes de desenhar.
+     *
+     * Sem isto, uma resposta em formato inesperado — daemon antigo respondendo a
+     * um front novo, por exemplo — era desenhada assim mesmo: cinco cards com
+     * título vazio, "perdeu a passagem de origem" e "sem anotação". Parecia
+     * perda de dado e não era; era `undefined` renderizado como conteúdo.
+     *
+     * Dado ausente com aviso é problema; dado ausente com aparência de dado é
+     * pânico. Na dúvida, cai para o estado local, que é o que o consultor
+     * acabou de escrever na frente do cliente.
+     */
+    const formaEsperada = (lista) => Array.isArray(lista)
+      && lista.every((o) => o && typeof o === 'object' && 'id' in o && 'titulo' in o);
+
+    let linhas = oportunidades;
+    let avisoDeForma = '';
+    if (pareamento) {
+      if (formaEsperada(pareamento.oportunidades)) {
+        linhas = pareamento.oportunidades;
+      } else {
+        avisoDeForma = 'O servidor respondeu num formato que esta tela não reconhece — '
+          + 'provavelmente o daemon está numa versão anterior. Reinicie-o (npm start) e '
+          + 'recarregue. Abaixo, o que está aberto neste navegador.';
+        console.warn('[oportunidades] formato inesperado em GET /cenarios:', pareamento);
+      }
+    }
 
     /**
      * Uma oportunidade não "tem" mais um cenário — as duas coisas são
@@ -607,9 +633,12 @@
     const selo = (o) => `<button class="op-selo op-selo-falta" data-gerar-cenario="${o.id}"
         title="Simular um cenário a partir desta ideia">simular</button>`;
 
-    const cabecalho = pareamento
+    const cabecalho = pareamento && !avisoDeForma
       ? `${pareamento.totalOportunidades} oportunidade(s) · ${pareamento.totalCenarios} cenário(s) neste processo`
-      : `${oportunidades.length} mapeada(s) neste canvas`;
+      : `${linhas.length} mapeada(s) neste canvas`;
+
+    const alertaDeForma = avisoDeForma
+      ? `<div class="op-orfaos">⚠ ${escapeHtml(avisoDeForma)}</div>` : '';
 
     const desancoradas = linhas.filter((o) => o.desancorada).length;
     const orfaos = desancoradas
@@ -624,6 +653,7 @@
             <div class="agd-sub">${cabecalho}</div></div>
           <button class="agd-close" data-fechar-lista>✕</button>
         </div>
+        ${alertaDeForma}
         ${orfaos}
         <div class="op-lista">${linhas.map((o) => {
           const postura = POSTURA_LABELS[o.posturaSugerida || 'realista'] || POSTURA_LABELS.realista;

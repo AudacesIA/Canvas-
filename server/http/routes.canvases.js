@@ -113,7 +113,7 @@ export function registerCanvasRoutes(router, { canvasService, changesetService }
    * que cenário e oportunidade se separaram, uma não diz nada sobre a outra.
    */
   router.get('/api/clients/:clientId/canvases/:canvasId/cenarios', async (req, res, { clientId, canvasId }) => {
-    sendJson(res, 200, await canvasService.pareamentoDeCenarios(clientId, canvasId));
+    sendJson(res, 200, await canvasService.cenariosEOportunidades(clientId, canvasId));
   });
 
   router.get('/api/clients/:clientId/canvases/:canvasId/comparar', async (req, res, { clientId, canvasId }, url) => {
@@ -128,8 +128,27 @@ export function registerCanvasRoutes(router, { canvasService, changesetService }
     const client = await canvasService.storage.readClient(clientId).catch(() => null);
     const analiseMarkdown = compararProcessosMarkdown(base, cenario, { clienteNome: client?.name || clientId });
     
+    /**
+     * Duas comparações, e são perguntas diferentes.
+     *
+     * `comparacao` mede contra o processo real de HOJE — é o que se leva à
+     * reunião: "hoje vocês fazem assim, no cenário ficaria assado".
+     *
+     * `desdeV0` mede contra o retrato do nascimento do cenário — responde "o que
+     * eu mudei aqui dentro", somando o que a IA propôs e foi aceito com o que o
+     * consultor ajustou à mão. Não muda quando o processo real evolui, que é
+     * justamente por isso que existe separada.
+     *
+     * Cenário criado antes do V0 vem com `null`, e a tela mostra só a primeira.
+     */
+    const v0 = cenario.derivadoDe.v0;
+    const desdeV0 = v0
+      ? compararCanvas({ nodes: v0.nodes, connections: v0.connections }, cenario)
+      : null;
+
     sendJson(res, 200, {
       comparacao: compararCanvas(base, cenario),
+      desdeV0,
       texto: compararEmTexto(base, cenario),
       analiseMarkdown,
     });
