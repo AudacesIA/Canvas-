@@ -144,6 +144,16 @@ export function registerAcessoRoutes(router, { canvasService, limite, notificaco
     res.end();
   });
 
+  /**
+   * A tela de entrada mudou de `/entrar.html` para `/login`, que é endereço de
+   * verdade — curto, digitável e mandável por mensagem. Quem tiver o antigo nos
+   * favoritos continua chegando.
+   */
+  router.get('/entrar.html', (req, res, _p, url) => {
+    res.writeHead(302, { Location: `/login${url.search}` });
+    res.end();
+  });
+
   /** A senha que veio pelo link, para a tela preencher o campo. */
   router.get('/api/senha-pendente', (req, res) => {
     const bruto = req.headers.cookie ?? '';
