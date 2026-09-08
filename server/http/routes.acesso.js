@@ -73,7 +73,7 @@ export function registerAcessoRoutes(router, { canvasService }) {
   router.get('/e/:token', async (req, res, { token }) => {
     const achado = await canvasService.clientePorToken(token);
     if (!achado) {
-      res.writeHead(302, { Location: '/entrar?erro=link' });
+      res.writeHead(302, { Location: '/entrar.html?erro=link&aba=cliente' });
       res.end();
       return;
     }

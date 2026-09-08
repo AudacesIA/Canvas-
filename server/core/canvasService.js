@@ -27,7 +27,9 @@ export class CanvasService {
     return Promise.all(
       clients.map(async (c) => {
         const ids = await this.storage.listCanvasIds(c.id);
-        return { ...c, canvasCount: ids.length };
+        // `temLink` em vez do hash: a Home precisa saber se já existe acesso
+        // emitido para mostrar o estado do ícone, e não precisa do segredo.
+        return { ...projetarCliente(c), canvasCount: ids.length, temLink: !!c.acesso?.hash };
       }),
     );
   }
@@ -98,7 +100,7 @@ export class CanvasService {
       this.listCanvases(clientId),
     ]);
     if (!client) throw httpError(404, `Cliente ${clientId} não encontrado`);
-    return { client, canvases };
+    return { client: projetarCliente(client), canvases };
   }
 
   /**
@@ -111,7 +113,11 @@ export class CanvasService {
   async getFullHome() {
     const clients = await this.storage.listClients();
     return Promise.all(
-      clients.map(async (client) => ({ ...client, canvases: await this.listCanvases(client.id) })),
+      clients.map(async (client) => ({
+        ...projetarCliente(client),
+        temLink: !!client.acesso?.hash,
+        canvases: await this.listCanvases(client.id),
+      })),
     );
   }
 
@@ -606,6 +612,26 @@ export class CanvasService {
       return { deleted: canvasId };
     });
   }
+}
+
+/**
+ * O que de um cliente pode sair pela API.
+ *
+ * LISTA DE PERMITIDOS, não de proibidos. O `client.json` era espalhado inteiro na
+ * resposta, e no dia em que ganhou `acesso.hash` o segredo de autenticação passou
+ * a chegar ao navegador do próprio cliente sem ninguém decidir isso. Com lista de
+ * proibidos, o campo novo nasce público e alguém precisa lembrar de escondê-lo;
+ * assim, nasce privado e alguém precisa decidir publicá-lo.
+ */
+function projetarCliente(c) {
+  if (!c) return c;
+  return {
+    id: c.id,
+    name: c.name,
+    createdAt: c.createdAt,
+    settings: c.settings,
+    vocabulary: c.vocabulary,
+  };
 }
 
 /** Remove os campos derivados que não devem ir para o disco. */

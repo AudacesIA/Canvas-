@@ -3210,6 +3210,112 @@ function loadHome() {
  * o anterior. É a mesma disciplina de chave de API, e vale explicar na tela em
  * vez de deixar a pessoa descobrir depois que perdeu.
  */
+/**
+ * O bloco "aqui está o link, copie agora".
+ *
+ * Um lugar só porque nasce em dois: no card de criar empresa e no ícone de
+ * corrente da Home. Duas cópias divergiriam justamente no aviso — que é a parte
+ * que importa, porque o link não é mostrado de novo.
+ */
+function blocoDoLink(caminho, nomeEmpresa) {
+  const url = `${window.location.origin}${caminho}`;
+  return `
+    <label style="display:block;font-size:12px;color:var(--text-secondary);">
+      Mande este link para ${escapeHtml(nomeEmpresa)}:</label>
+    <input class="campo-link-acesso" readonly value="${escapeHtml(url)}"
+      style="width:100%;margin-top:6px;padding:9px 11px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.15);border-radius:6px;color:#fff;font-size:12px;">
+    <button class="header-btn" data-copiar-link style="margin-top:10px;"><i class="fa-solid fa-copy"></i> Copiar</button>
+    <p class="modal-subtitle" style="margin-top:12px;font-size:12px;color:#fbbf24;">
+      Copie agora. Este link não é mostrado de novo — em disco fica só um resumo dele.
+      Gerar outro invalida este.
+    </p>`;
+}
+
+/** Copiar com retorno visual. `execCommand` é a saída para contexto sem HTTPS. */
+async function copiarLinkDeAcesso(botao, campo) {
+  campo.select();
+  try { await navigator.clipboard.writeText(campo.value); } catch { document.execCommand('copy'); }
+  botao.innerHTML = '<i class="fa-solid fa-check"></i> Copiado';
+}
+
+/**
+ * Card de nova empresa: nome e link no mesmo gesto.
+ *
+ * Antes era `prompt('Nome da empresa:')` e o link vinha depois, noutro lugar —
+ * dava para criar a empresa e esquecer o acesso, ou mandar o link de uma para a
+ * outra. Nascendo juntos, não existe empresa sem link nem link sem dono.
+ */
+function abrirModalNovaEmpresa() {
+  document.getElementById('modal-nova-empresa')?.remove();
+  const ov = document.createElement('div');
+  ov.id = 'modal-nova-empresa';
+  ov.className = 'esc-overlay';
+  ov.innerHTML = `
+    <div class="qd-box" style="max-width:520px;">
+      <div class="esc-head">
+        <div><b>Nova empresa</b>
+          <div class="agd-sub">A empresa e o link de acesso dela são criados juntos.</div></div>
+        <button class="agd-close" data-fechar-nova>✕</button>
+      </div>
+      <div style="padding:18px 20px;" id="nova-corpo">
+        <form id="form-nova-empresa">
+          <label for="nova-nome" style="display:block;font-size:12px;color:var(--text-secondary);text-transform:uppercase;letter-spacing:.05em;">Nome da empresa</label>
+          <input type="text" id="nova-nome" autocomplete="off" placeholder="Ex.: Berenice Shakti"
+            style="width:100%;margin-top:7px;padding:10px 12px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.15);border-radius:8px;color:#fff;font-size:14px;">
+          <button type="submit" class="audit-btn" style="margin:14px 0 0;">
+            <span class="audit-btn-inner"><i class="fa-solid fa-plus"></i> Criar empresa e gerar link</span>
+          </button>
+        </form>
+      </div>
+    </div>`;
+  document.body.appendChild(ov);
+  ov.querySelector('#nova-nome').focus();
+
+  ov.addEventListener('click', async (e) => {
+    if (e.target.closest('[data-fechar-nova]') || e.target === ov) return ov.remove();
+    if (e.target.closest('[data-copiar-link]')) {
+      await copiarLinkDeAcesso(e.target.closest('button'), ov.querySelector('.campo-link-acesso'));
+    }
+  });
+
+  ov.querySelector('#form-nova-empresa').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const nome = ov.querySelector('#nova-nome').value.trim();
+    if (!nome) return;
+    const corpo = ov.querySelector('#nova-corpo');
+    corpo.innerHTML = '<p class="modal-subtitle">Criando…</p>';
+
+    let empresa;
+    try {
+      ({ client: empresa } = await Audasys.api.createClient(nome));
+    } catch (err) {
+      corpo.innerHTML = `<div class="sc-erro">Não foi possível criar a empresa: ${escapeHtml(err.message)}</div>`;
+      return;
+    }
+
+    /**
+     * Empresa criada é trabalho feito.
+     *
+     * Se a geração do link falhar aqui, NÃO se apaga a empresa: seria trocar uma
+     * falha explicada por trabalho perdido. Diz-se o que faltou e aponta-se onde
+     * terminar o serviço.
+     */
+    try {
+      const { caminho } = await Audasys.api.gerarAcesso(empresa.id);
+      corpo.innerHTML = `<p class="modal-subtitle" style="margin-bottom:14px;">
+          <i class="fa-solid fa-circle-check" style="color:#34d399;"></i>
+          Empresa <b>${escapeHtml(empresa.name)}</b> criada.</p>${blocoDoLink(caminho, empresa.name)}`;
+      corpo.querySelector('.campo-link-acesso').select();
+    } catch (err) {
+      corpo.innerHTML = `<div class="sc-erro">
+        Empresa <b>${escapeHtml(empresa.name)}</b> foi criada, mas o link de acesso não:
+        ${escapeHtml(err.message)}<br>Gere o link pelo ícone de corrente, ao lado do nome dela na lista.</div>`;
+    }
+    await refreshHome();
+    loadHome();
+  });
+}
+
 async function abrirModalAcesso(folder) {
   document.getElementById('modal-acesso')?.remove();
   const ov = document.createElement('div');
@@ -3248,27 +3354,16 @@ async function abrirModalAcesso(folder) {
         const { caminho } = await Audasys.api.gerarAcesso(folder.id);
         // A URL é montada aqui, com a origem de onde a tela foi aberta — assim o
         // mesmo servidor serve localhost e produção sem variável de ambiente a mais.
-        const url = `${window.location.origin}${caminho}`;
-        corpo.innerHTML = `
-          <label style="font-size:12px;color:var(--text-secondary);">Mande este link para ${escapeHtml(folder.name)}:</label>
-          <input id="acesso-url" readonly value="${escapeHtml(url)}"
-            style="width:100%;margin-top:6px;padding:9px 11px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.15);border-radius:6px;color:#fff;font-size:12px;">
-          <button class="header-btn" id="btn-copiar-acesso" style="margin-top:10px;"><i class="fa-solid fa-copy"></i> Copiar</button>
-          <p class="modal-subtitle" style="margin-top:12px;font-size:12px;color:#fbbf24;">
-            Copie agora. Este link não é mostrado de novo — em disco fica só um resumo dele.
-          </p>`;
-        corpo.querySelector('#acesso-url').select();
+        corpo.innerHTML = blocoDoLink(caminho, folder.name);
+        corpo.querySelector('.campo-link-acesso').select();
       } catch (err) {
         corpo.innerHTML = `<div class="sc-erro">${escapeHtml(err.message)}</div>`;
       }
       return;
     }
 
-    if (e.target.closest('#btn-copiar-acesso')) {
-      const campo = ov.querySelector('#acesso-url');
-      campo.select();
-      try { await navigator.clipboard.writeText(campo.value); } catch { document.execCommand('copy'); }
-      e.target.closest('button').innerHTML = '<i class="fa-solid fa-check"></i> Copiado';
+    if (e.target.closest('[data-copiar-link]')) {
+      await copiarLinkDeAcesso(e.target.closest('button'), ov.querySelector('.campo-link-acesso'));
       return;
     }
 
@@ -3526,14 +3621,6 @@ function renderProcessoCard(cv, cenariosFilhos, folder, home, POSTURA_LABELS) {
 }
 
 // ── CRUD actions ──────────────────────────────────────────────────────────────
-async function createFolder(name) {
-  try {
-    await Audasys.api.createClient(name || 'Nova Empresa');
-    await refreshHome();
-    loadHome();
-  } catch (err) { reportError('criar a empresa', err); }
-}
-
 async function createCanvas(folderId, name) {
   try {
     const { canvas } = await Audasys.api.createCanvas(folderId, name || 'Novo Canvas');
@@ -3699,10 +3786,7 @@ async function moveCanvas(canvasId, fromFolderId, toFolderId) {
 // ── Toolbar button wiring ─────────────────────────────────────────────────────
 document.getElementById('btn-back-home').addEventListener('click', closeCanvas);
 
-document.getElementById('home-btn-new-folder').addEventListener('click', () => {
-  const name = prompt('Nome da empresa:');
-  if (name && name.trim()) createFolder(name.trim());
-});
+document.getElementById('home-btn-new-folder').addEventListener('click', abrirModalNovaEmpresa);
 
 document.getElementById('home-btn-new-canvas').addEventListener('click', () => {
   const home = loadHomeData();

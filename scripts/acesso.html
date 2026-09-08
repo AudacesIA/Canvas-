@@ -49,9 +49,19 @@ try{
  ck('cliente NÃO apaga canvas',           await cod('DELETE',`/api/clients/${client.id}/canvases/${canvas.id}`)===403);
  ck('cliente NÃO gera link para si',      await cod('POST',`/api/clients/${client.id}/acesso`)===403);
 
+ // o cliente nao pode receber o hash do proprio token: e segredo de autenticacao
+ const home=await (await fetch(`/api/clients/${client.id}/home`)).json();
+ ck('cliente NAO recebe acesso.hash em /home', !('acesso' in home.client),
+    Object.keys(home.client).join(','));
+
  // ── sair zera tudo ───────────────────────────────────────────────────────
  await fetch('/api/sair',{method:'POST'});
  ck('sem sessão não lê nada',             await cod('GET',`/api/clients/${client.id}/canvases`)===401);
+
+ // link invalido tem que cair numa pagina que EXISTE — antes ia para /entrar (404)
+ const r=await fetch('/e/token-que-nao-existe',{redirect:'follow'});
+ ck('link inválido cai em página que responde 200', r.status===200, 'HTTP '+r.status);
+ ck('e essa página é a de login', /entrar/.test(r.url), r.url.replace(location.origin,''));
 
  // limpeza
  await fetch('/api/entrar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({chave:window.CHAVE_ADMIN})});

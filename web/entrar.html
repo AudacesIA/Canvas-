@@ -5,31 +5,12 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Audasys Canvas — Entrar</title>
 <link rel="stylesheet" href="style.css">
-<style>
-  .entrar-tela { min-height:100vh; display:grid; place-items:center; padding:24px; }
-  .entrar-caixa { width:100%; max-width:380px; background:#0f172a;
-    border:1px solid var(--glass-border); border-radius:14px; padding:28px; }
-  .entrar-marca { display:flex; align-items:center; gap:9px; margin-bottom:22px; }
-  .entrar-marca span { font-size:17px; font-weight:700; letter-spacing:-.01em; }
-  .entrar-caixa label { display:block; font-size:12px; color:var(--text-secondary);
-    text-transform:uppercase; letter-spacing:.05em; margin-bottom:7px; }
-  .entrar-caixa input { width:100%; padding:11px 13px; background:rgba(255,255,255,.05);
-    border:1px solid rgba(255,255,255,.15); border-radius:8px; color:#fff; font-size:14px; }
-  .entrar-caixa input:focus { outline:none; border-color:var(--glass-border-hover); }
-  .entrar-caixa button { width:100%; margin-top:16px; padding:11px; border:none; border-radius:8px;
-    background:#2563eb; color:#fff; font-size:14px; font-weight:600; cursor:pointer; }
-  .entrar-caixa button:disabled { opacity:.55; cursor:default; }
-  .entrar-aviso { margin-top:16px; padding:10px 12px; border-radius:8px; font-size:12.5px;
-    line-height:1.5; border:1px solid rgba(248,113,113,.35); border-left-width:3px;
-    background:rgba(248,113,113,.08); color:#fca5a5; }
-  .entrar-rodape { margin-top:20px; font-size:12px; color:var(--text-secondary); line-height:1.6; }
-</style>
 </head>
 <body>
 <div class="entrar-tela">
   <div class="entrar-caixa">
     <div class="entrar-marca">
-      <svg width="26" height="26" viewBox="0 0 100 100" fill="none">
+      <svg width="26" height="26" viewBox="0 0 100 100" fill="none" aria-hidden="true">
         <defs><linearGradient id="g" x1="0%" y1="0%" x2="0%" y2="100%">
           <stop offset="0%" stop-color="#60a5fa"/><stop offset="100%" stop-color="#2563eb"/>
         </linearGradient></defs>
@@ -38,45 +19,98 @@
       <span>AudaSys Canvas</span>
     </div>
 
+    <div class="entrar-abas" role="tablist">
+      <button class="entrar-aba" id="aba-admin" role="tab" data-aba="admin">Entrar como Admin</button>
+      <button class="entrar-aba" id="aba-cliente" role="tab" data-aba="cliente">Entrar como Cliente</button>
+    </div>
+
     <div id="area-erro"></div>
 
-    <form id="form-entrar">
+    <form id="form-admin" class="entrar-painel">
       <label for="chave">Chave de administrador</label>
-      <input type="password" id="chave" autocomplete="current-password" autofocus>
-      <button type="submit" id="btn-entrar">Entrar</button>
+      <input type="password" id="chave" autocomplete="current-password">
+      <button type="submit" class="entrar-botao">Entrar</button>
+      <p class="entrar-rodape">Acesso da consultoria. Vê todas as empresas.</p>
     </form>
 
-    <p class="entrar-rodape">
-      Se você é cliente da consultoria, use o link de acesso que recebeu — ele entra direto,
-      sem senha.
-    </p>
+    <form id="form-cliente" class="entrar-painel">
+      <label for="codigo">Link de acesso</label>
+      <input type="text" id="codigo" autocomplete="off" spellcheck="false"
+             placeholder="Cole aqui o link que você recebeu">
+      <button type="submit" class="entrar-botao">Entrar</button>
+      <p class="entrar-rodape">
+        Pode colar o link inteiro ou só o código do final dele. Você verá apenas os
+        processos da sua empresa.
+      </p>
+    </form>
   </div>
 </div>
-<script>
-const erro = (msg) => {
-  document.getElementById('area-erro').innerHTML = `<div class="entrar-aviso">${msg}</div>`;
-};
 
-// Link inválido ou revogado cai aqui pelo redirect de /e/<token>.
-if (new URLSearchParams(location.search).get('erro') === 'link') {
-  erro('Esse link de acesso não é mais válido. Peça um novo à consultoria.');
+<script>
+const $ = (id) => document.getElementById(id);
+const erro = (msg) => { $('area-erro').innerHTML = msg ? `<div class="entrar-aviso">${msg}</div>` : ''; };
+
+/**
+ * Extrai o código de acesso do que foi colado.
+ *
+ * Tolerante de propósito: o link chega por WhatsApp e volta com espaço em volta,
+ * quebra de linha no meio, `?` de parâmetro colado atrás, às vezes a URL inteira
+ * e às vezes só o código. Recusar por causa de um espaço é transformar um
+ * problema de formatação num telefonema para o consultor.
+ */
+function extrairCodigo(bruto) {
+  const texto = String(bruto || '').trim().replace(/\s+/g, '');
+  if (!texto) return null;
+  const naUrl = texto.match(/\/e\/([A-Za-z0-9_-]{20,})/);
+  if (naUrl) return naUrl[1];
+  // Código puro: 32 bytes em base64url dão 43 caracteres.
+  if (/^[A-Za-z0-9_-]{20,}$/.test(texto)) return texto;
+  return null;
 }
 
-// Já tem sessão? Não faz sentido pedir a chave de novo.
-fetch('/api/sessao').then(r => r.json()).then(s => {
-  if (s.autenticado) location.href = '/';
-}).catch(() => {});
+// ── Abas ──────────────────────────────────────────────────────────────────────
+const LEMBRANCA = 'audasys.abaLogin';
+function mostrarAba(qual) {
+  for (const nome of ['admin', 'cliente']) {
+    const ativa = nome === qual;
+    $(`aba-${nome}`).classList.toggle('ativa', ativa);
+    $(`aba-${nome}`).setAttribute('aria-selected', String(ativa));
+    $(`form-${nome}`).classList.toggle('ativo', ativa);
+  }
+  try { localStorage.setItem(LEMBRANCA, qual); } catch { /* aba anônima */ }
+  $(qual === 'admin' ? 'chave' : 'codigo').focus();
+}
+document.querySelectorAll('.entrar-aba').forEach((b) => {
+  b.addEventListener('click', () => { erro(''); mostrarAba(b.dataset.aba); });
+});
 
-document.getElementById('form-entrar').addEventListener('submit', async (e) => {
+// Prioridade: o que a URL pede > o que o navegador lembra > admin.
+const params = new URLSearchParams(location.search);
+let inicial = params.get('aba');
+if (!['admin', 'cliente'].includes(inicial)) {
+  try { inicial = localStorage.getItem(LEMBRANCA); } catch { inicial = null; }
+}
+mostrarAba(['admin', 'cliente'].includes(inicial) ? inicial : 'admin');
+
+if (params.get('erro') === 'link') {
+  erro('Esse link de acesso não é mais válido — ele pode ter sido revogado ou substituído '
+     + 'por um novo. Peça outro à consultoria.');
+}
+
+// Já tem sessão? Não faz sentido pedir credencial de novo.
+fetch('/api/sessao').then((r) => r.json()).then((s) => { if (s.autenticado) location.href = '/'; })
+  .catch(() => {});
+
+// ── Admin ─────────────────────────────────────────────────────────────────────
+$('form-admin').addEventListener('submit', async (e) => {
   e.preventDefault();
-  const btn = document.getElementById('btn-entrar');
-  btn.disabled = true;
-  btn.textContent = 'Entrando…';
+  const btn = e.target.querySelector('button');
+  btn.disabled = true; btn.textContent = 'Entrando…';
   try {
     const r = await fetch('/api/entrar', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ chave: document.getElementById('chave').value }),
+      body: JSON.stringify({ chave: $('chave').value }),
     });
     if (!r.ok) {
       const { error } = await r.json().catch(() => ({}));
@@ -85,10 +119,30 @@ document.getElementById('form-entrar').addEventListener('submit', async (e) => {
     location.href = '/';
   } catch (err) {
     erro(err.message);
-    btn.disabled = false;
-    btn.textContent = 'Entrar';
-    document.getElementById('chave').select();
+    btn.disabled = false; btn.textContent = 'Entrar';
+    $('chave').select();
   }
+});
+
+// ── Cliente ───────────────────────────────────────────────────────────────────
+/**
+ * Nenhuma rota nova: `GET /e/<código>` já valida, grava a sessão e redireciona.
+ * Colar na tela e clicar no link são o mesmo caminho do ponto de vista do servidor.
+ */
+$('form-cliente').addEventListener('submit', (e) => {
+  e.preventDefault();
+  const codigo = extrairCodigo($('codigo').value);
+  // Erro de formato é diferente de código recusado, e dizer qual dos dois é o que
+  // permite a pessoa se corrigir sozinha em vez de ligar para o consultor.
+  if (!codigo) {
+    erro('Não reconheci um link de acesso aí. Cole a URL inteira que você recebeu, '
+       + 'ou apenas o código que vem depois de <code>/e/</code>.');
+    $('codigo').select();
+    return;
+  }
+  const btn = e.target.querySelector('button');
+  btn.disabled = true; btn.textContent = 'Entrando…';
+  location.href = `/e/${codigo}`;
 });
 </script>
 </body>

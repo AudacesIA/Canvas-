@@ -1,0 +1,88 @@
+<!doctype html>
+<!--
+  Tela de entrada e criação de empresa.
+
+  O que importa aqui é o caminho do cliente: a extração do código do que foi
+  colado. O link chega por WhatsApp e volta com espaço, quebra de linha e, às
+  vezes, só o pedaço final. Recusar por formatação transforma um problema de
+  copiar-e-colar num telefonema para o consultor — por isso cada variação é um
+  caso de teste.
+-->
+<title>login</title><body><pre id="o">…</pre>
+<iframe id="f" style="position:fixed;left:-4000px;width:1100px;height:800px"></iframe>
+<script>
+window.CHAVE=new URLSearchParams(location.search).get('k')||'';
+const R=[],erros=[];
+const ck=(n,p,d)=>R.push((p?'OK   ':'FALHA')+' '+n+(d?'  ('+d+')':''));
+window.addEventListener('error',e=>erros.push(e.message));
+const until=async(f,ms=8000)=>{const t=Date.now();while(Date.now()-t<ms){try{if(await f())return true;}catch{}await new Promise(r=>setTimeout(r,120));}return false;};
+const api=async(m,p,b)=>{const r=await fetch(p,{method:m,headers:b?{'Content-Type':'application/json'}:{},body:b?JSON.stringify(b):undefined});const j=await r.json().catch(()=>null);if(!r.ok)throw new Error((j&&j.error)||r.status);return j;};
+
+(async()=>{
+try{
+ const f=document.getElementById('f'), D=()=>f.contentDocument, W=()=>f.contentWindow;
+
+ // ── a tela de entrada ────────────────────────────────────────────────────
+ f.src='/entrar.html';
+ await until(()=>D()&&D().getElementById('form-cliente'));
+ ck('tela tem as duas abas', !!D().getElementById('aba-admin') && !!D().getElementById('aba-cliente'));
+ ck('admin é a aba inicial', D().getElementById('form-admin').classList.contains('ativo'));
+
+ D().getElementById('aba-cliente').click();
+ ck('clicar troca para a aba do cliente',
+    D().getElementById('form-cliente').classList.contains('ativo')
+    && !D().getElementById('form-admin').classList.contains('ativo'));
+
+ // extração do código, que é o miolo da aba do cliente
+ const extrair=W().extrairCodigo;
+ const COD='8fJ2k9LmQ4rT7wX1zA5bC3dE6gH0jK2mN4pQ8sU1vY3';
+ ck('extrai de URL completa',      extrair(`https://canvas.exemplo.com/e/${COD}`)===COD);
+ ck('extrai de URL local',         extrair(`http://127.0.0.1:8787/e/${COD}`)===COD);
+ ck('aceita o código puro',        extrair(COD)===COD);
+ ck('tolera espaço e quebra',      extrair(`  https://x.com/e/${COD} \n `)===COD);
+ ck('recusa texto qualquer',       extrair('oi, manda o link')===null);
+ ck('recusa vazio',                extrair('   ')===null);
+
+ // erro de formato avisa em vez de navegar
+ D().getElementById('codigo').value='isso não é um link';
+ D().getElementById('form-cliente').querySelector('button').click();
+ ck('formato inválido mostra aviso', await until(()=>D().querySelector('.entrar-aviso'),2000),
+    D().querySelector('.entrar-aviso')?.textContent.trim().slice(0,44));
+
+ // ── criar empresa pelo card, com link junto ──────────────────────────────
+ await api('POST','/api/entrar',{chave:window.CHAVE});
+ f.src='/';
+ await until(()=>D()&&typeof W().abrirModalNovaEmpresa==='function');
+ await until(()=>D().getElementById('home-btn-new-folder'));
+
+ W().abrirModalNovaEmpresa();
+ ck('card de nova empresa abre', await until(()=>D().getElementById('modal-nova-empresa')));
+ ck('não usa prompt do navegador', !!D().getElementById('nova-nome'));
+
+ D().getElementById('nova-nome').value='ZZ Login Empresa';
+ D().getElementById('form-nova-empresa').dispatchEvent(new (W().Event)('submit',{cancelable:true}));
+
+ const veioLink=await until(()=>D().querySelector('.campo-link-acesso'),9000);
+ ck('empresa e link nascem no mesmo card', veioLink);
+ const url=D().querySelector('.campo-link-acesso')?.value||'';
+ ck('link tem a forma esperada', /\/e\/[A-Za-z0-9_-]{20,}$/.test(url), url.replace(location.origin,''));
+ ck('aviso de que só aparece uma vez',
+    /não é mostrado de novo/i.test(D().getElementById('nova-corpo').textContent));
+
+ // ── o link criado funciona de ponta a ponta ──────────────────────────────
+ const codigo=extrair(url);
+ await api('POST','/api/sair');
+ await fetch(`/e/${codigo}`,{redirect:'follow'});
+ const s=await api('GET','/api/sessao');
+ ck('o link entra como cliente da empresa certa', s.papel==='cliente', s.papel+':'+s.clientId);
+ ck('cliente NÃO enxerga as outras empresas', (await (await fetch('/api/home')).status)===403);
+
+ // limpeza
+ await api('POST','/api/entrar',{chave:window.CHAVE});
+ await api('DELETE',`/api/clients/${s.clientId}`);
+}catch(e){ck('execução',false,e.message);}
+ const text=R.join('\n')+(erros.length?'\n\nERROS JS:\n'+erros.join('\n'):'');
+ document.getElementById('o').textContent=text;
+ await fetch('/api/_test-report',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text})});
+})();
+</script>
